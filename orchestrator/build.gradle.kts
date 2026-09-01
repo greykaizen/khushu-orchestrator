@@ -17,6 +17,7 @@ dependencies {
     api("com.github.greykaizen.khushu-engine:engine-facade:2.0.0")
     api("com.github.greykaizen.khushu-data-api:khushu-data-api:1.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    implementation("com.squareup.okio:okio:3.9.0") // LocalFetcher signature (data-api api-dep gap)
     testImplementation(kotlin("test"))
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }
