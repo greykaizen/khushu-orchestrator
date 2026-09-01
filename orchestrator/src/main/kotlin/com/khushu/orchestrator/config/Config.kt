@@ -21,7 +21,15 @@ typealias CalendarConfiguration = com.khushu.engine.calendar.CalendarConfigurati
 typealias CalendarParams = com.khushu.engine.calendar.CalendarParams
 typealias CivilCalendarType = com.khushu.engine.calendar.CivilCalendarType
 
+// NOTE: Kotlin cannot dereference nested classes through a typealias
+// (`Alias.Nested` is unsupported by design — verified 2.3.21/2.4.10), so the
+// sealed DateLine variants and CalendarConfiguration.Side are re-exported as
+// their own top-level aliases.
 typealias DateLine = com.khushu.engine.calendar.DateLine
+typealias DateLineHijri = com.khushu.engine.calendar.DateLine.Hijri
+typealias DateLineGregorian = com.khushu.engine.calendar.DateLine.Gregorian
+typealias DateLineRegional = com.khushu.engine.calendar.DateLine.Regional
+typealias CalendarSide = com.khushu.engine.calendar.CalendarConfiguration.Side
 typealias DualDate = com.khushu.engine.calendar.DualDate
 typealias DualDates = com.khushu.engine.calendar.DualDates
 
