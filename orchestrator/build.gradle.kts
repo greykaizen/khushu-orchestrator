@@ -15,7 +15,7 @@ dependencies {
     // Composition layer: both family libraries cross this seam. `api` because
     // public signatures expose engine and data-api types directly.
     api("com.github.greykaizen.khushu-engine:engine-facade:2.0.0")
-    api("com.github.greykaizen:khushu-data-api:data-api-v1.3.0")
+    api("com.github.greykaizen:khushu-data-api:data-api-v1.3.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     implementation("com.squareup.okio:okio:3.9.0") // LocalFetcher signature (data-api api-dep gap)
     testImplementation(kotlin("test"))
