@@ -143,14 +143,25 @@ internal class DayModelCache(private val capacity: Int = 4) {
  * compose fetch+math, never own domain logic).
  */
 class KhushuOrchestrator(
-    val engine: KhushuEngine = KhushuEngine(),
-    val data: KhushuContent,
+    // `internal`: the wall. Hosts compose through the namespaces + [content]/
+    // [downloads] delegation surfaces — direct engine/data calls (and their
+    // recomputation costs) are uncompilable from host code. The libraries
+    // remain fully usable standalone by OTHER consumers; hiding is
+    // orchestrator-scoped by design.
+    internal val engine: KhushuEngine = KhushuEngine(),
+    internal val data: KhushuContent,
 ) {
     private val cache = DayModelCache()
 
     val dua = DuaNamespace(this)
     val calendar = CalendarNamespace(this)
     val mushaf = MushafNamespace(this)
+
+    /** Read-only delegation over data-api retrieval — see [ContentNamespace]. */
+    val content = ContentNamespace(this)
+
+    /** Download plans + batch execution — see [DownloadsNamespace]. */
+    val downloads = DownloadsNamespace(this)
 
     /**
      * Build (or fetch cached) the [DayModel] for [key]. The ONLY place prayer
@@ -162,6 +173,12 @@ class KhushuOrchestrator(
     }
 
     private suspend fun build(key: DayKey): DayModel {
+        // Slug-index the corpus once per build: every probe-point evaluation
+        // below reads pre-grouped lists (O(1) per slot) instead of re-filtering
+        // the 491-dua corpus.
+        val bySlug = HashMap<String, MutableList<com.khushu.data.model.Dua>>()
+        for (d in data.dua.duas()) bySlug.getOrPut(d.subcategory) { mutableListOf() }.add(d)
+
         val times = engine.prayer.times(
             key.location, key.date, key.settings.prayerConfig,
         )
@@ -198,7 +215,7 @@ class KhushuOrchestrator(
 
         val seen = LinkedHashMap<Pair<String, Pair<Instant, Instant>?>, AdaptiveDuaSection>()
         for (probe in probePoints) {
-            for (s in data.dua.adaptive(ctx.copy(now = probe))) {
+            for (s in data.dua.adaptive(ctx.copy(now = probe), bySlug)) {
                 seen.putIfAbsent(s.subcategory to s.window, s)
             }
         }

@@ -3,6 +3,8 @@ package com.khushu.orchestrator
 import com.khushu.data.model.LineType
 import com.khushu.data.repo.KhushuContent
 import kotlin.math.max
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Mushaf rendering composite: data-api atlas assets × page-line maps → a
@@ -19,6 +21,31 @@ import kotlin.math.max
  * assets (donor parity with QuranApp's Title/Bismillah line items).
  */
 class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
+
+    /** Per-bundle memo: glyph table, word→placements, word registry — built once, reused across pages. */
+    private class BundleAssets(
+        val layer: com.khushu.data.atlas.AtlasLayerRoot,
+        val placementsByWord: Map<String, List<com.khushu.data.atlas.AtlasGlyphPlacement>>,
+        val registry: List<com.khushu.data.model.RegistryWord>,
+        val unitsPerEm: Int,
+    )
+
+    private val assetsMutex = Mutex()
+    private val assets = HashMap<String, BundleAssets>()
+
+    private suspend fun bundleAssets(bundleId: String, sizeLabel: String): BundleAssets {
+        val key = "$bundleId|$sizeLabel"
+        assets[key]?.let { return it }
+        return assetsMutex.withLock {
+            assets[key]?.let { return@withLock it }
+            val layer = o.data.quran.atlas.glyphTable(bundleId, sizeLabel)
+            val placements = o.data.quran.atlas.placementsByWord(bundleId, sizeLabel)
+            val script = o.data.quran.mushafScript(bundleId)
+            val registry = o.data.quran.wordRegistry(script)
+            val meta = o.data.quran.atlas.meta(bundleId, sizeLabel)
+            BundleAssets(layer, placements, registry, meta.font.unitsPerEm).also { assets[key] = it }
+        }
+    }
 
     /** One glyph instance: font-unit positioning + texture-page rect. */
     data class PositionedGlyph(
@@ -90,10 +117,7 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
         page: Int,
         sizeLabel: String = "6x",
     ): MushafPageLayout {
-        val layer = o.data.quran.atlas.glyphTable(bundleId, sizeLabel)
-        val placementsByWord = o.data.quran.atlas.placementsByWord(bundleId, sizeLabel)
-        val script = o.data.quran.mushafScript(mushafCode)
-        val registry = o.data.quran.wordRegistry(script) // ordered by word id
+        val a = bundleAssets(bundleId, sizeLabel)
         val lines = o.data.quran.pageLines(mushafCode, page)
 
         // Registry word ids are 1-based running order — direct index math.
@@ -104,15 +128,15 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
                     out += MushafLine.Title(line.lineNumber, it)
                 }
                 LineType.BASMALLAH -> out += MushafLine.Bismillah(line.lineNumber)
-                else -> out += resolveTextLine(line.lineNumber, line.isCentered, line, registry, placementsByWord, layer)
+                else -> out += resolveTextLine(line.lineNumber, line.isCentered, line, a.registry, a.placementsByWord, a.layer)
             }
         }
         return MushafPageLayout(
             mushafCode = mushafCode,
             bundleId = bundleId,
             page = page,
-            unitsPerEm = o.data.quran.atlas.meta(bundleId, sizeLabel).font.unitsPerEm,
-            ppem = layer.ppem,
+            unitsPerEm = a.unitsPerEm,
+            ppem = a.layer.ppem,
             lines = out,
         )
     }
