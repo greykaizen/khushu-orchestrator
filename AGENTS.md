@@ -54,7 +54,18 @@ Deliberately absent: sunnah (data-only), zakat/tasbih (values are host-supplied 
 - Invalidation: day rollover (new key), explicit `forceRecompute()`, host constructs a new request when settings/location change.
 - Deterministic: same inputs → same plan, virtual-time testable.
 
-## 6. Tag & release discipline
+## 6. Fonts & Quran rendering
+
+The Quran/Sunnah font knowledge base lives in the Khushu host:
+`Khushu/docs/quran-fonts.md` (render contract, codepoints, download tiers).
+Fonts are HOST assets — this repo ships none. The content catalog carries the
+donor fonts (`inventory/fonts/*`, packs `quran_icons`/`quran_text`/`sunnah`,
+plus KFQPC per-page bundles); `PlanFactory` exposes
+`fontPack/allFontPacks/kfqpcPageFonts/atlasBundle/allAtlasBundles` and the
+orchestrator delegates `catalogFonts()`. Codepoint tables:
+`inventory/quran_metadata/quran_glyphs.json` (delegated: `surahIcon`/`juzIcon`).
+
+## 7. Tag & release discipline
 
 - Published JitPack tags are IMMUTABLE — never move/re-push a tag; JitPack caches builds per version and a moved tag yields stale/conflicting artifacts. New code = new tag.
 - Layering: khushu-engine's `facade` module remains the engine's own API (standalone consumers, `DayApi` caches). The orchestrator composes over the facade namespaces but deliberately does NOT route through `DayApi` — per-day caching is the DayModel's job. No double caching by construction.

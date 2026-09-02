@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.khushu.data.ContentTiersTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-09-02T17:38:47.963Z" hostname="Shah" time="10.288">
+<testsuite name="com.khushu.data.ContentTiersTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-09-02T23:17:33.992Z" hostname="Shah" time="8.235">
   <properties/>
-  <testcase name="wbwWordIndicesAlignWithScriptPacks()" classname="com.khushu.data.ContentTiersTest" time="0.494"/>
-  <testcase name="chapterInfoCarriesHtmlBodyForBothVariants()" classname="com.khushu.data.ContentTiersTest" time="0.079"/>
-  <testcase name="recitationTimingsAnchorVersesAndWords()" classname="com.khushu.data.ContentTiersTest" time="0.388"/>
-  <testcase name="tafsirSplitsServePerSurah()" classname="com.khushu.data.ContentTiersTest" time="0.03"/>
-  <testcase name="wbwCoversFatihahWithTranslationAndTransliteration()" classname="com.khushu.data.ContentTiersTest" time="9.262"/>
+  <testcase name="wbwWordIndicesAlignWithScriptPacks()" classname="com.khushu.data.ContentTiersTest" time="0.337"/>
+  <testcase name="chapterInfoCarriesHtmlBodyForBothVariants()" classname="com.khushu.data.ContentTiersTest" time="0.048"/>
+  <testcase name="recitationTimingsAnchorVersesAndWords()" classname="com.khushu.data.ContentTiersTest" time="0.48"/>
+  <testcase name="tafsirSplitsServePerSurah()" classname="com.khushu.data.ContentTiersTest" time="0.014"/>
+  <testcase name="wbwCoversFatihahWithTranslationAndTransliteration()" classname="com.khushu.data.ContentTiersTest" time="7.342"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

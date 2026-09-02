@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.khushu.data.DuaSliceTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-09-02T17:38:58.264Z" hostname="Shah" time="0.49">
+<testsuite name="com.khushu.data.DuaSliceTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-09-02T23:17:42.236Z" hostname="Shah" time="0.411">
   <properties/>
-  <testcase name="articleReturnsRawHtmlBody()" classname="com.khushu.data.DuaSliceTest" time="0.102"/>
-  <testcase name="duaFieldsAreStructuredNotHtml()" classname="com.khushu.data.DuaSliceTest" time="0.037"/>
-  <testcase name="outOfRangeDuaIsNull()" classname="com.khushu.data.DuaSliceTest" time="0.078"/>
-  <testcase name="articlePathTraversalIsRejected()" classname="com.khushu.data.DuaSliceTest" time="0.005"/>
-  <testcase name="asmaPacksHave99NamesInAll11Languages()" classname="com.khushu.data.DuaSliceTest" time="0.084"/>
-  <testcase name="subcategoryLookupFilters()" classname="com.khushu.data.DuaSliceTest" time="0.046"/>
-  <testcase name="corpusHas491DuasAcross30Subcategories()" classname="com.khushu.data.DuaSliceTest" time="0.044"/>
-  <testcase name="asmaNameLookupWorks()" classname="com.khushu.data.DuaSliceTest" time="0.027"/>
-  <testcase name="articleIndexCovers186EntriesIn12Categories()" classname="com.khushu.data.DuaSliceTest" time="0.02"/>
+  <testcase name="articleReturnsRawHtmlBody()" classname="com.khushu.data.DuaSliceTest" time="0.031"/>
+  <testcase name="duaFieldsAreStructuredNotHtml()" classname="com.khushu.data.DuaSliceTest" time="0.049"/>
+  <testcase name="outOfRangeDuaIsNull()" classname="com.khushu.data.DuaSliceTest" time="0.082"/>
+  <testcase name="articlePathTraversalIsRejected()" classname="com.khushu.data.DuaSliceTest" time="0.01"/>
+  <testcase name="asmaPacksHave99NamesInAll11Languages()" classname="com.khushu.data.DuaSliceTest" time="0.056"/>
+  <testcase name="subcategoryLookupFilters()" classname="com.khushu.data.DuaSliceTest" time="0.05"/>
+  <testcase name="corpusHas491DuasAcross30Subcategories()" classname="com.khushu.data.DuaSliceTest" time="0.05"/>
+  <testcase name="asmaNameLookupWorks()" classname="com.khushu.data.DuaSliceTest" time="0.017"/>
+  <testcase name="articleIndexCovers186EntriesIn12Categories()" classname="com.khushu.data.DuaSliceTest" time="0.028"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

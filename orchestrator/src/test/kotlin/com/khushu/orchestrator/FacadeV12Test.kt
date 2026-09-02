@@ -207,6 +207,43 @@ class FacadeV12Test {
         )
     }
 
+    // ── font + atlas plan factories (v1.4.1) ──────────────────────────────
+
+    @Test
+    fun fontPackPlansCoverTheCatalog() = runBlocking {
+        val plans = assertNotNull(orchestrator().downloads.plans())
+        val icons = plans.fontPack("quran_icons")
+        // QuranApp-authoritative decorative fonts: suracon (surah glyphs) + quran_common (bismillah/frames)
+        assertEquals(2, icons.paths.size)
+        assertTrue(icons.paths.any { it.endsWith("suracon.ttf") })
+        assertTrue(icons.paths.any { it.endsWith("quran_common.ttf") })
+        assertNotNull(icons.totalBytes)
+
+        val text = plans.fontPack("quran_text")
+        assertEquals(listOf("inventory/fonts/quran_text/uthmanic_hafs.ttf"), text.paths)
+
+        val sunnah = plans.fontPack("sunnah")
+        assertEquals(6, sunnah.paths.size, "KFGQPC naskh x2, nastaliq, bengali x2, scheherazade")
+        try {
+            plans.fontPack("nonexistent")
+            error("expected failure")
+        } catch (e: IllegalStateException) {
+            assertTrue(e.message!!.contains("available"))
+        }
+    }
+
+    @Test
+    fun kfqpcAndAtlasBundlePlansResolveRealFiles() = runBlocking {
+        val plans = assertNotNull(orchestrator().downloads.plans())
+        val kfqpc = plans.kfqpcPageFonts()
+        assertEquals("fonts:kfqpc:kfqpc_v1", kfqpc.id)
+        assertEquals(listOf("inventory/fonts/kfqpc_v1/kfqpc_v1-1.zip"), kfqpc.paths)
+
+        val atlas = plans.atlasBundle("uthmani", "6x")
+        assertEquals(listOf("inventory/atlas/uthmani/6x.zip"), atlas.paths)
+        assertEquals("atlas:uthmani:6x", atlas.id)
+    }
+
     // ── warmup ────────────────────────────────────────────────────────────
 
     @Test

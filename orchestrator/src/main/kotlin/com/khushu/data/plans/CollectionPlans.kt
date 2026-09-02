@@ -4,7 +4,9 @@ import com.khushu.data.transport.ContentFetcher
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -184,4 +186,123 @@ class PlanFactory(private val fetcher: ContentFetcher, preloaded: DownloadsLedge
         title = "99 Names ($lang)",
         paths = listOf("inventory/asma_ul_husna/asma_data_$lang.json"),
     )
+
+    // ── Fonts (donor rendering assets — QuranApp provenance) ─────────────
+
+    /**
+     * One thematic font pack from the fonts catalog (paths from
+     * available_fonts_info.json): `quran_icons` (surah icons + bismillah +
+     * title frames — APK-bundle candidates), `quran_text` (uthmanic_hafs
+     * non-atlas fallback), `sunnah` (hadith Arabic Naskh + Urdu/Bengali).
+     */
+    suspend fun fontPack(packId: String): CollectionPlan {
+        val catalog = fetchCatalog()
+        val pack = catalog.firstOrNull { it.id == packId }
+            ?: error("unknown font pack '$packId' — available: ${catalog.map { it.id }}")
+        return finish(
+            id = "fonts:pack:$packId",
+            title = pack.displayName,
+            paths = pack.files.map { it.path },
+        )
+    }
+
+    /** All catalog font packs (fonts only — the per-page QPC bundles below are separate). */
+    suspend fun allFontPacks(): CollectionPlan {
+        val catalog = fetchCatalog()
+        val paths = catalog.flatMap { pack -> pack.files.map { it.path } }
+        return finish("fonts:all", "All catalog font packs", paths)
+    }
+
+    /**
+     * One KFQPC per-page font bundle — page-exact print-fidelity text mode
+     * (604 page TTFs per script version; donor ScriptFontsDownloadWorker
+     * semantics: download per script, load per page, LRU the reader window).
+     */
+    suspend fun kfqpcPageFonts(version: KfqpcVersion = KfqpcVersion.V1): CollectionPlan {
+        val dir = "inventory/fonts/${version.dirName}"
+        val bundle = "${dir}/${version.zipName}"
+        return finish(
+            id = "fonts:kfqpc:${version.id}",
+            title = "KFQPC page fonts — ${version.label}",
+            paths = listOf(bundle),
+        )
+    }
+
+    /**
+     * One glyph-atlas bundle zip — rasterized mushaf mode for a script
+     * (uthmani / dk_indopak / dk_indopak_v2; no fonts needed for atlas mode).
+     */
+    suspend fun atlasBundle(bundleId: String, sizeLabel: String = "6x"): CollectionPlan {
+        val info = fetchAtlasCatalog()
+        val bundle = info.firstOrNull { it.id == bundleId }
+            ?: error("unknown atlas bundle '$bundleId' — available: ${info.map { it.id }}")
+        val size = bundle.sizes.firstOrNull { it.label == sizeLabel }
+            ?: error("atlas $bundleId has no size '$sizeLabel'")
+        return finish(
+            id = "atlas:$bundleId:$sizeLabel",
+            title = "${bundleId} atlas ($sizeLabel, ${size.ppem}ppem)",
+            paths = listOf(size.url),
+        )
+    }
+
+    /** All atlas bundles (every mirrored script at every mirrored size). */
+    suspend fun allAtlasBundles(): CollectionPlan {
+        val info = fetchAtlasCatalog()
+        val paths = info.flatMap { b -> b.sizes.map { it.url } }
+        return finish("atlas:all", "All glyph-atlas bundles", paths)
+    }
+
+    private suspend fun fetchCatalog(): List<com.khushu.data.model.FontPackEntry> {
+        val root = Json { ignoreUnknownKeys = true }.parseToJsonElement(
+            fetcher.fetch("inventory/fonts/available_fonts_info.json").decodeToString(),
+        ).jsonObject
+        return root["fonts"]!!.jsonArray.map { el ->
+            val o = el.jsonObject
+            com.khushu.data.model.FontPackEntry(
+                id = o["id"]!!.jsonPrimitive.content,
+                displayName = o["display_name"]!!.jsonPrimitive.content,
+                usage = o["usage"]?.jsonPrimitive?.content,
+                files = o["files"]!!.jsonArray.map { f ->
+                    val fo = f.jsonObject
+                    com.khushu.data.model.FontFileEntry(
+                        id = fo["id"]!!.jsonPrimitive.content,
+                        displayName = fo["display_name"]?.jsonPrimitive?.content ?: fo["id"]!!.jsonPrimitive.content,
+                        path = fo["path"]!!.jsonPrimitive.content,
+                        format = fo["format"]?.jsonPrimitive?.content ?: "ttf",
+                        weight = fo["weight"]?.jsonPrimitive?.intOrNull ?: 400,
+                        provenance = fo["provenance"]?.jsonPrimitive?.content,
+                    )
+                },
+            )
+        }
+    }
+
+    private suspend fun fetchAtlasCatalog(): List<AtlasBundleInfo> {
+        val root = Json { ignoreUnknownKeys = true }.parseToJsonElement(
+            fetcher.fetch("inventory/atlas/available_atlas_info.json").decodeToString(),
+        ).jsonObject
+        return root["atlas"]!!.jsonArray.map { el ->
+            val o = el.jsonObject
+            AtlasBundleInfo(
+                id = o["id"]!!.jsonPrimitive.content,
+                renders = o["renders"]?.jsonPrimitive?.content ?: "",
+                sizes = o["sizes"]!!.jsonArray.map { s ->
+                    val so = s.jsonObject
+                    AtlasSizeInfo(
+                        label = so["label"]!!.jsonPrimitive.content,
+                        ppem = so["ppem"]!!.jsonPrimitive.int,
+                        url = so["url"]!!.jsonPrimitive.content,
+                    )
+                },
+            )
+        }
+    }
 }
+
+/** KFQPC script versions with page-font bundles in the corpus. */
+enum class KfqpcVersion(val id: String, val dirName: String, val zipName: String, val label: String) {
+    V1("kfqpc_v1", "kfqpc_v1", "kfqpc_v1-1.zip", "KFGQPC V1"),
+}
+
+internal data class AtlasBundleInfo(val id: String, val renders: String, val sizes: List<AtlasSizeInfo>)
+internal data class AtlasSizeInfo(val label: String, val ppem: Int, val url: String)

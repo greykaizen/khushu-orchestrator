@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.khushu.orchestrator.DayModelTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-09-02T17:39:04.492Z" hostname="Shah" time="4.271">
+<testsuite name="com.khushu.orchestrator.DayModelTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-09-02T23:17:49.406Z" hostname="Shah" time="6.082">
   <properties/>
-  <testcase name="renderablePageResolvesGlyphsAndDecorations()" classname="com.khushu.orchestrator.DayModelTest" time="1.857"/>
-  <testcase name="polarDayServesAnytimeOnly()" classname="com.khushu.orchestrator.DayModelTest" time="0.131"/>
-  <testcase name="settingsChangeYieldsDistinctPlan()" classname="com.khushu.orchestrator.DayModelTest" time="0.069"/>
-  <testcase name="dayModelBuildsWithRealEngineTimes()" classname="com.khushu.orchestrator.DayModelTest" time="0.035"/>
-  <testcase name="bedtimeSettingActivatesBeforeSleep()" classname="com.khushu.orchestrator.DayModelTest" time="0.034"/>
-  <testcase name="maxSectionsServedExactly()" classname="com.khushu.orchestrator.DayModelTest" time="0.055"/>
-  <testcase name="fullDayRotationServesRightSlots()" classname="com.khushu.orchestrator.DayModelTest" time="0.036"/>
-  <testcase name="nextBoundaryWalksForward()" classname="com.khushu.orchestrator.DayModelTest" time="0.033"/>
-  <testcase name="wakeSettingActivatesWakingUp()" classname="com.khushu.orchestrator.DayModelTest" time="0.032"/>
-  <testcase name="boundariesAreSortedAndCoverTheDay()" classname="com.khushu.orchestrator.DayModelTest" time="0.027"/>
-  <testcase name="dayModelIsCachedNoRebuild()" classname="com.khushu.orchestrator.DayModelTest" time="0.037"/>
-  <testcase name="renderablePageIsCachedByTransport()" classname="com.khushu.orchestrator.DayModelTest" time="1.899"/>
+  <testcase name="renderablePageResolvesGlyphsAndDecorations()" classname="com.khushu.orchestrator.DayModelTest" time="2.955"/>
+  <testcase name="polarDayServesAnytimeOnly()" classname="com.khushu.orchestrator.DayModelTest" time="0.062"/>
+  <testcase name="settingsChangeYieldsDistinctPlan()" classname="com.khushu.orchestrator.DayModelTest" time="0.092"/>
+  <testcase name="dayModelBuildsWithRealEngineTimes()" classname="com.khushu.orchestrator.DayModelTest" time="0.05"/>
+  <testcase name="bedtimeSettingActivatesBeforeSleep()" classname="com.khushu.orchestrator.DayModelTest" time="0.05"/>
+  <testcase name="maxSectionsServedExactly()" classname="com.khushu.orchestrator.DayModelTest" time="0.081"/>
+  <testcase name="fullDayRotationServesRightSlots()" classname="com.khushu.orchestrator.DayModelTest" time="0.064"/>
+  <testcase name="nextBoundaryWalksForward()" classname="com.khushu.orchestrator.DayModelTest" time="0.035"/>
+  <testcase name="wakeSettingActivatesWakingUp()" classname="com.khushu.orchestrator.DayModelTest" time="0.037"/>
+  <testcase name="boundariesAreSortedAndCoverTheDay()" classname="com.khushu.orchestrator.DayModelTest" time="0.066"/>
+  <testcase name="dayModelIsCachedNoRebuild()" classname="com.khushu.orchestrator.DayModelTest" time="0.094"/>
+  <testcase name="renderablePageIsCachedByTransport()" classname="com.khushu.orchestrator.DayModelTest" time="2.464"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

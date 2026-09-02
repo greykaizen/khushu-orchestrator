@@ -1,17 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.khushu.data.HadithSliceTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-09-02T17:38:58.763Z" hostname="Shah" time="1.576">
+<testsuite name="com.khushu.data.HadithSliceTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-09-02T23:17:42.655Z" hostname="Shah" time="1.123">
   <properties/>
-  <testcase name="byIdResolvesUrnStyleIds()" classname="com.khushu.data.HadithSliceTest" time="0.591"/>
-  <testcase name="gradesAndReferencesExposedViaById()" classname="com.khushu.data.HadithSliceTest" time="0.494"/>
-  <testcase name="blocksCarryVerifiedTaxonomyAndParsedSpans()" classname="com.khushu.data.HadithSliceTest" time="0.042"/>
-  <testcase name="uninstalledCollectionReturnsNullSafely()" classname="com.khushu.data.HadithSliceTest" time="0.002"/>
-  <testcase name="bukhariAnchorsMatchFullScan()" classname="com.khushu.data.HadithSliceTest" time="0.048"/>
-  <testcase name="every_corpus_carries_bundle_meta()" classname="com.khushu.data.HadithSliceTest" time="0.034"/>
-  <testcase name="narratorsJoinScholars()" classname="com.khushu.data.HadithSliceTest" time="0.085"/>
-  <testcase name="searchBuildsFts5AndFinds()" classname="com.khushu.data.HadithSliceTest" time="0.248"/>
+  <testcase name="byIdResolvesUrnStyleIds()" classname="com.khushu.data.HadithSliceTest" time="0.082"/>
+  <testcase name="gradesAndReferencesExposedViaById()" classname="com.khushu.data.HadithSliceTest" time="0.536"/>
+  <testcase name="blocksCarryVerifiedTaxonomyAndParsedSpans()" classname="com.khushu.data.HadithSliceTest" time="0.052"/>
+  <testcase name="uninstalledCollectionReturnsNullSafely()" classname="com.khushu.data.HadithSliceTest" time="0.003"/>
+  <testcase name="bukhariAnchorsMatchFullScan()" classname="com.khushu.data.HadithSliceTest" time="0.037"/>
+  <testcase name="every_corpus_carries_bundle_meta()" classname="com.khushu.data.HadithSliceTest" time="0.055"/>
+  <testcase name="narratorsJoinScholars()" classname="com.khushu.data.HadithSliceTest" time="0.105"/>
+  <testcase name="searchBuildsFts5AndFinds()" classname="com.khushu.data.HadithSliceTest" time="0.226"/>
   <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[SLF4J: Failed to load class "org.slf4j.impl.StaticLoggerBinder".
-SLF4J: Defaulting to no-operation (NOP) logger implementation
-SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further details.
-]]></system-err>
+  <system-err><![CDATA[]]></system-err>
 </testsuite>
