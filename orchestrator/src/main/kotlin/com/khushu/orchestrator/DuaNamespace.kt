@@ -62,7 +62,14 @@ class DuaNamespace internal constructor(private val o: KhushuOrchestrator) {
         maxWait: java.time.Duration = java.time.Duration.ofHours(1),
         /** Time source — inject a virtual clock in tests. */
         nowNow: () -> Instant = { Instant.now() },
+        /**
+         * Time compression: how many real ms one virtual ms costs in the
+         * boundary sleep. 1.0 = production (sleep real gaps); tests pass
+         * e.g. 3600.0 to turn an hour-long boundary gap into a 1s wait.
+         */
+        timeScale: Double = 1.0,
     ): StateFlow<List<AdaptiveDuaSection>> {
+        require(timeScale > 0) { "timeScale must be positive" }
         val state = MutableStateFlow<List<AdaptiveDuaSection>>(emptyList())
         scope.launch {
             var now = startNow
@@ -75,9 +82,9 @@ class DuaNamespace internal constructor(private val o: KhushuOrchestrator) {
                 // drift (settings edits, resume) still re-evaluates periodically.
                 val boundary = model.nextBoundary(now)
                 val waitMs = when (boundary) {
-                    null -> maxWait.toMillis()
-                    else -> java.time.Duration.between(now, boundary).toMillis()
-                        .coerceIn(1L, maxWait.toMillis())
+                    null -> (maxWait.toMillis() / timeScale).toLong().coerceAtLeast(50L)
+                    else -> (java.time.Duration.between(now, boundary).toMillis() / timeScale)
+                        .toLong().coerceIn(50L, (maxWait.toMillis() / timeScale).toLong())
                 }
                 withTimeoutOrNull(waitMs) { delay(Long.MAX_VALUE) }
                 now = nowNow()

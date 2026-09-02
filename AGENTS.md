@@ -47,7 +47,12 @@ Deliberately absent: sunnah (data-only), zakat/tasbih (values are host-supplied 
 - Invalidation: day rollover (new key), explicit `forceRecompute()`, host constructs a new request when settings/location change.
 - Deterministic: same inputs → same plan, virtual-time testable.
 
-## 6. Verification
+## 6. Tag & release discipline
+
+- Published JitPack tags are IMMUTABLE — never move/re-push a tag; JitPack caches builds per version and a moved tag yields stale/conflicting artifacts. New code = new tag.
+- Layering: khushu-engine's `facade` module remains the engine's own API (standalone consumers, `DayApi` caches). The orchestrator composes over the facade namespaces but deliberately does NOT route through `DayApi` — per-day caching is the DayModel's job. No double caching by construction.
+
+## 7. Verification
 
 - Virtual-time tests for the adaptive flow (prayer transitions → section rotation).
 - Slot-window tests: overlap priority, midnight-crossing bedtime, polar days (null anchors → ANYTIME only), day rollover.

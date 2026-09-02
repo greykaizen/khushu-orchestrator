@@ -141,6 +141,14 @@ internal class DayModelCache(private val capacity: Int = 4) {
  * The orchestrator facade — host adds ONE dependency and receives engine +
  * data-api transitively. Namespaces hold named composites only (doctrine:
  * compose fetch+math, never own domain logic).
+ *
+ * SINGLETON CONTRACT: create ONE instance per process (app-scoped) and share
+ * it everywhere — the [DayModelCache] and mushaf bundle memo are
+ * instance-scoped and Mutex-guarded (safe for concurrent suspend callers);
+ * a second instance would duplicate per-day computations. Construction
+ * requires the host's transport decision (cache dir + fetcher), so the
+ * singleton lives in the host's DI/AppContainer, not here. [warmup] is the
+ * app-start hook: prebuild the day plan before first frame.
  */
 class KhushuOrchestrator(
     // `internal`: the wall. Hosts compose through the namespaces + [content]/
@@ -163,6 +171,9 @@ class KhushuOrchestrator(
     /** Download plans + batch execution — see [DownloadsNamespace]. */
     val downloads = DownloadsNamespace(this)
 
+    /** Offline hadith corpora lifecycle (attach → search/books) — see [SunnahNamespace]. */
+    val sunnah = SunnahNamespace(this)
+
     /**
      * Build (or fetch cached) the [DayModel] for [key]. The ONLY place prayer
      * times are computed for the day; adaptive serves read from it.
@@ -170,6 +181,26 @@ class KhushuOrchestrator(
     suspend fun dayModel(key: DayKey, forceRecompute: Boolean = false): DayModel {
         if (forceRecompute) cache.clear()
         return cache.get(key) { build(it) }
+    }
+
+    /**
+     * App-start hook: prebuild the DayModel for [today] (and optionally
+     * [tomorrow]'s — the night windows already span into it) and warm the
+     * mushaf bundle assets for [mushafBundle] when supplied. Guarantees the
+     * first frame never pays the day-build or bundle-load cost. Idempotent —
+     * everything hits the instance caches.
+     */
+    suspend fun warmup(
+        today: DayKey,
+        includeTomorrow: Boolean = false,
+        mushafBundle: Pair<String, String>? = null,
+        mushafPages: IntRange = 1..5,
+    ) {
+        dayModel(today)
+        if (includeTomorrow) {
+            dayModel(today.copy(date = today.date.plusDays(1)))
+        }
+        mushafBundle?.let { bundleSpec -> mushaf.prefetchPages(bundleSpec.first, bundleSpec.second, mushafPages) }
     }
 
     private suspend fun build(key: DayKey): DayModel {

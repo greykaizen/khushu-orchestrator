@@ -92,16 +92,86 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
         val lines: List<MushafLine>,
     )
 
+    /** Immutable, pixel-independent ayah layout (ayah-mode reading). */
+    data class AyahGlyphLayout(
+        val mushafCode: String,
+        val bundleId: String,
+        val ayahId: Int,
+        val unitsPerEm: Int,
+        val ppem: Int,
+        val words: List<PositionedWord>,
+        /** Measured width in font units (host scales/wraps at draw time). */
+        val widthFu: Double,
+    )
+
+    /**
+     * One ayah → positioned glyphs in font units, addressed by the canonical
+     * word registry (ayahId = surah*1000 + ayah) — page-geometry-independent,
+     * donor ayah-mode parity: placements per verse, host wraps at draw time.
+     */
+    suspend fun renderableAyah(
+        mushafCode: String,
+        bundleId: String,
+        surahNo: Int,
+        ayahNo: Int,
+        sizeLabel: String = "6x",
+    ): AyahGlyphLayout {
+        val a = bundleAssets(bundleId, sizeLabel)
+        val ayahId = surahNo * 1000 + ayahNo
+        val words = a.registry.filter { it.ayahId == ayahId }
+        var widthFu = 0.0
+        val positioned = words.map { w ->
+            val placements = a.placementsByWord[w.text].orEmpty()
+            val glyphs = placements.map { p ->
+                val rect = a.layer.glyphs[p.g.toString()]
+                PositionedGlyph(
+                    glyphId = p.g,
+                    textureIndex = rect?.textureIndex ?: 0,
+                    xAdvanceFu = p.xa,
+                    yOffsetFu = p.yo,
+                    xOffsetFu = p.xo,
+                    x = rect?.x ?: 0, y = rect?.y ?: 0,
+                    w = rect?.w ?: 0, h = rect?.h ?: 0,
+                )
+            }
+            val wWidth = glyphs.sumOf { it.xAdvanceFu }
+            widthFu += wWidth
+            PositionedWord(w.ayahId, w.text, glyphs, wWidth)
+        }
+        return AyahGlyphLayout(
+            mushafCode = mushafCode,
+            bundleId = bundleId,
+            ayahId = ayahId,
+            unitsPerEm = a.unitsPerEm,
+            ppem = a.layer.ppem,
+            words = positioned,
+            widthFu = widthFu,
+        )
+    }
+
     /**
      * Warm the bundle assets (glyph table, layout docs) + the page-line map
      * for [pages] through the caching transport. Resumable and offline-capable;
      * later [renderablePage] calls for these pages are cache hits.
+     * [includeTextures] also pulls every glyph texture PNG (required for
+     * offline drawing — the rects reference texture pages by index).
      */
-    suspend fun prefetchPages(mushafCode: String, bundleId: String, pages: IntRange, sizeLabel: String = "6x") {
-        o.data.quran.atlas.glyphTable(bundleId, sizeLabel)
+    suspend fun prefetchPages(
+        mushafCode: String,
+        bundleId: String,
+        pages: IntRange,
+        sizeLabel: String = "6x",
+        includeTextures: Boolean = true,
+    ) {
+        val layer = o.data.quran.atlas.glyphTable(bundleId, sizeLabel)
         o.data.quran.atlas.layoutDocuments(bundleId, sizeLabel)
         for (page in pages) {
             o.data.quran.pageLines(mushafCode, page)
+        }
+        if (includeTextures) {
+            for (slice in layer.textures) {
+                o.data.quran.atlas.textureBytes(bundleId, slice.index, sizeLabel)
+            }
         }
     }
 
