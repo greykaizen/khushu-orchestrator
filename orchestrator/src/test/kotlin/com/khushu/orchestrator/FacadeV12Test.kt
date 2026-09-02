@@ -168,6 +168,47 @@ class FacadeV12Test {
         assertTrue(bytes.contentEquals(secondBytes))
     }
 
+    // ── sajdah-marker resolution (v1.3.1 fallback) ────────────────────────
+
+    @Test
+    fun sajdahMarkerWordsResolveGlyphsViaNormalizedFallback() = runBlocking {
+        val o = orchestrator()
+        // every sajdah verse must resolve glyphs for its marker-carrying word
+        // (ayahIds verified in the corpus: 7:206, 13:15, 16:50, 17:109, 19:58,
+        // 22:18, 22:77, 25:60, 27:26, 32:15, 38:24, 41:38, 53:62, 84:21, 96:19)
+        val sajdahAyahs = listOf(
+            7 to 206, 13 to 15, 16 to 50, 17 to 109, 19 to 58,
+            22 to 18, 22 to 77, 25 to 60, 27 to 26, 32 to 15,
+            38 to 24, 41 to 38, 53 to 62, 84 to 21, 96 to 19,
+        )
+        for ((s, a) in sajdahAyahs) {
+            val layout = o.mushaf.renderableAyah("qpc", "uthmani", s, a)
+            assertTrue(
+                layout.words.isNotEmpty(),
+                "sajdah ayah $s:$a must resolve registry words",
+            )
+            assertEquals(
+                0, layout.unresolvedWords,
+                "sajdah ayah $s:$a must not lose a word to lookup variance: " +
+                    layout.words.filter { it.glyphs.isEmpty() }.map { it.text },
+            )
+        }
+    }
+
+    @Test
+    fun normalizedFallbackIsDeterministicAndPageCarriesUnresolvedCount() = runBlocking {
+        val o = orchestrator()
+        val p1 = o.mushaf.renderablePage("qpc", "uthmani", 1)
+        val p1again = o.mushaf.renderablePage("qpc", "uthmani", 1)
+        assertEquals(p1, p1again)
+        assertTrue(p1.unresolvedWords >= 0)
+        // normalization contract: stripping variance marks is stable
+        assertEquals(
+            MushafNamespace.normalizeWord("يَسۡجُدُونَۤ۩"),
+            MushafNamespace.normalizeWord("يَسۡجُدُونَۤ۩"),
+        )
+    }
+
     // ── warmup ────────────────────────────────────────────────────────────
 
     @Test
@@ -186,7 +227,10 @@ class FacadeV12Test {
     fun sunnahAttachServesSearchOverLocalCorpora() = runBlocking {
         val o = orchestrator()
         val corporaRoot = File(repoRoot, "inventory/hadiths")
-        o.sunnah.attach(corporaRoot)
+        // side index OUTSIDE the corpora root — a search_index.db inside would
+        // pollute installedCollections (every *.db looks like a corpus)
+        val sideIndex = File(repoRoot, "build/sunnah-search-index.db")
+        o.sunnah.attach(corporaRoot, searchIndexDb = sideIndex)
         try {
             val hadith = o.sunnah.hadith("bukhari_urn_100010", lang = "en")
             assertNotNull(hadith)

@@ -31,7 +31,7 @@ publishing {
             from(components["java"])
             groupId = "com.khushu"
             artifactId = "orchestrator"
-            version = "1.3.0"
+            version = "1.3.1"
             pom {
                 name.set("Khushu Orchestrator")
                 description.set(

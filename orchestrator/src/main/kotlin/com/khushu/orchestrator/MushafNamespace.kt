@@ -22,13 +22,34 @@ import kotlinx.coroutines.sync.withLock
  */
 class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
 
-    /** Per-bundle memo: glyph table, word→placements, word registry — built once, reused across pages. */
+    /**
+     * Per-bundle memo: glyph table, word→placements, word registry — built
+     * once, reused across pages. [normalizedIndex] maps diacritic-stripped
+     * word text → an atlas doc key whose placements exist: the registry's
+     * orthography of a handful of marker words (sajdah rows) varies from the
+     * atlas doc keys by combining-mark order, and an exact-string miss would
+     * blank a Quranic word — unacceptable for a sacred text.
+     */
     private class BundleAssets(
         val layer: com.khushu.data.atlas.AtlasLayerRoot,
         val placementsByWord: Map<String, List<com.khushu.data.atlas.AtlasGlyphPlacement>>,
+        val normalizedIndex: Map<String, String>,
         val registry: List<com.khushu.data.model.RegistryWord>,
         val unitsPerEm: Int,
     )
+
+    private fun placementsFor(a: BundleAssets, text: String): List<com.khushu.data.atlas.AtlasGlyphPlacement> =
+        a.placementsByWord[text]
+            ?: a.normalizedIndex[normalizeWord(text)]?.let { a.placementsByWord[it] }
+            ?: emptyList()
+
+    companion object {
+        /** Combining marks whose ordering/selection varies between the registry and atlas keys. */
+        private val VARIANCE_MARKS = Regex("[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]")
+
+        /** Deterministic diacritic-stripped form for fallback lookup. */
+        fun normalizeWord(text: String): String = VARIANCE_MARKS.replace(text, "")
+    }
 
     private val assetsMutex = Mutex()
     private val assets = HashMap<String, BundleAssets>()
@@ -40,10 +61,11 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
             assets[key]?.let { return@withLock it }
             val layer = o.data.quran.atlas.glyphTable(bundleId, sizeLabel)
             val placements = o.data.quran.atlas.placementsByWord(bundleId, sizeLabel)
+            val normalizedIndex = placements.keys.associateBy { normalizeWord(it) }
             val script = o.data.quran.mushafScript(bundleId)
             val registry = o.data.quran.wordRegistry(script)
             val meta = o.data.quran.atlas.meta(bundleId, sizeLabel)
-            BundleAssets(layer, placements, registry, meta.font.unitsPerEm).also { assets[key] = it }
+            BundleAssets(layer, placements, normalizedIndex, registry, meta.font.unitsPerEm).also { assets[key] = it }
         }
     }
 
@@ -79,6 +101,8 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
             val words: List<PositionedWord>,
             /** Measured width in font units (host scales to px). */
             val widthFu: Double,
+            /** Internal plumbing: words in this line without resolved glyphs. */
+            internal val unresolvedCount: Int = 0,
         ) : MushafLine
     }
 
@@ -90,6 +114,8 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
         val unitsPerEm: Int,
         val ppem: Int,
         val lines: List<MushafLine>,
+        /** Words whose glyphs could not be resolved (host may fall back to plain text — donor parity). */
+        val unresolvedWords: Int,
     )
 
     /** Immutable, pixel-independent ayah layout (ayah-mode reading). */
@@ -102,6 +128,8 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
         val words: List<PositionedWord>,
         /** Measured width in font units (host scales/wraps at draw time). */
         val widthFu: Double,
+        /** Words whose glyphs could not be resolved (host may fall back to plain text — donor parity). */
+        val unresolvedWords: Int,
     )
 
     /**
@@ -120,8 +148,10 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
         val ayahId = surahNo * 1000 + ayahNo
         val words = a.registry.filter { it.ayahId == ayahId }
         var widthFu = 0.0
-        val positioned = words.map { w ->
-            val placements = a.placementsByWord[w.text].orEmpty()
+        var unresolvedWords = 0
+        val positioned = words.mapIndexed { idx, w ->
+            val placements = placementsFor(a, w.text)
+            if (placements.isEmpty()) unresolvedWords++
             val glyphs = placements.map { p ->
                 val rect = a.layer.glyphs[p.g.toString()]
                 PositionedGlyph(
@@ -136,7 +166,7 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
             }
             val wWidth = glyphs.sumOf { it.xAdvanceFu }
             widthFu += wWidth
-            PositionedWord(w.ayahId, w.text, glyphs, wWidth)
+            PositionedWord(idx + 1, w.text, glyphs, wWidth)
         }
         return AyahGlyphLayout(
             mushafCode = mushafCode,
@@ -146,6 +176,7 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
             ppem = a.layer.ppem,
             words = positioned,
             widthFu = widthFu,
+            unresolvedWords = unresolvedWords,
         )
     }
 
@@ -192,13 +223,18 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
 
         // Registry word ids are 1-based running order — direct index math.
         val out = mutableListOf<MushafLine>()
+        var unresolvedWords = 0
         for (line in lines) {
             when (line.type) {
                 LineType.SURAH_NAME -> line.surahNo?.let {
                     out += MushafLine.Title(line.lineNumber, it)
                 }
                 LineType.BASMALLAH -> out += MushafLine.Bismillah(line.lineNumber)
-                else -> out += resolveTextLine(line.lineNumber, line.isCentered, line, a.registry, a.placementsByWord, a.layer)
+                else -> {
+                    val resolved = resolveTextLine(line.lineNumber, line.isCentered, line, a)
+                    unresolvedWords += resolved.unresolvedCount
+                    out += resolved
+                }
             }
         }
         return MushafPageLayout(
@@ -208,6 +244,7 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
             unitsPerEm = a.unitsPerEm,
             ppem = a.layer.ppem,
             lines = out,
+            unresolvedWords = unresolvedWords,
         )
     }
 
@@ -215,19 +252,19 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
         lineNumber: Int,
         centered: Boolean,
         line: com.khushu.data.model.PageLine,
-        registry: List<com.khushu.data.model.RegistryWord>,
-        placementsByWord: Map<String, List<com.khushu.data.atlas.AtlasGlyphPlacement>>,
-        layer: com.khushu.data.atlas.AtlasLayerRoot,
+        a: BundleAssets,
     ): MushafLine.Text {
         val first = line.firstWordId ?: return MushafLine.Text(lineNumber, centered, emptyList(), 0.0)
         val last = line.lastWordId ?: first
         // 1-based running word order → registry slice.
-        val words = registry.drop((first - 1).coerceAtLeast(0)).take(max(0, last - first + 1))
+        val words = a.registry.drop((first - 1).coerceAtLeast(0)).take(max(0, last - first + 1))
         var widthFu = 0.0
+        var unresolved = 0
         val positioned = words.mapIndexed { idx, w ->
-            val placements = placementsByWord[w.text].orEmpty()
+            val placements = placementsFor(a, w.text)
+            if (placements.isEmpty()) unresolved++
             val glyphs = placements.map { p ->
-                val rect = layer.glyphs[p.g.toString()]
+                val rect = a.layer.glyphs[p.g.toString()]
                 PositionedGlyph(
                     glyphId = p.g,
                     textureIndex = rect?.textureIndex ?: 0,
@@ -242,6 +279,6 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
             widthFu += wWidth
             PositionedWord(first + idx, w.text, glyphs, wWidth)
         }
-        return MushafLine.Text(lineNumber, centered, positioned, widthFu)
+        return MushafLine.Text(lineNumber, centered, positioned, widthFu, unresolved)
     }
 }

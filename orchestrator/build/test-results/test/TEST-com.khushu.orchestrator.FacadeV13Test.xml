@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.khushu.orchestrator.FacadeV13Test" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-09-02T11:06:57.613Z" hostname="Shah" time="2.311">
+<testsuite name="com.khushu.orchestrator.FacadeV13Test" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-09-02T15:45:24.583Z" hostname="Shah" time="1.49">
   <properties/>
-  <testcase name="statusCrossesMidnightIntoTomorrowFajr()" classname="com.khushu.orchestrator.FacadeV13Test" time="0.566"/>
-  <testcase name="monthGridCoversTheWholeMonthWithDualDates()" classname="com.khushu.orchestrator.FacadeV13Test" time="0.285"/>
-  <testcase name="alarmScheduleReturnsSortedFuturePrayerEntries()" classname="com.khushu.orchestrator.FacadeV13Test" time="0.104"/>
-  <testcase name="alarmScheduleFivePrayersPerDay()" classname="com.khushu.orchestrator.FacadeV13Test" time="0.062"/>
-  <testcase name="statusFlowAdvancesAtPrayerBoundaries()" classname="com.khushu.orchestrator.FacadeV13Test" time="1.125"/>
-  <testcase name="statusServesCurrentAndNextFromCachedModel()" classname="com.khushu.orchestrator.FacadeV13Test" time="0.027"/>
-  <testcase name="monthGridJoinsDisplayEntriesOnHijriDay()" classname="com.khushu.orchestrator.FacadeV13Test" time="0.061"/>
+  <testcase name="statusCrossesMidnightIntoTomorrowFajr()" classname="com.khushu.orchestrator.FacadeV13Test" time="0.027"/>
+  <testcase name="monthGridCoversTheWholeMonthWithDualDates()" classname="com.khushu.orchestrator.FacadeV13Test" time="0.221"/>
+  <testcase name="alarmScheduleReturnsSortedFuturePrayerEntries()" classname="com.khushu.orchestrator.FacadeV13Test" time="0.027"/>
+  <testcase name="alarmScheduleFivePrayersPerDay()" classname="com.khushu.orchestrator.FacadeV13Test" time="0.019"/>
+  <testcase name="statusFlowAdvancesAtPrayerBoundaries()" classname="com.khushu.orchestrator.FacadeV13Test" time="1.047"/>
+  <testcase name="statusServesCurrentAndNextFromCachedModel()" classname="com.khushu.orchestrator.FacadeV13Test" time="0.03"/>
+  <testcase name="monthGridJoinsDisplayEntriesOnHijriDay()" classname="com.khushu.orchestrator.FacadeV13Test" time="0.105"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>
