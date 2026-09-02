@@ -3,6 +3,7 @@ package com.khushu.orchestrator
 import com.khushu.data.adaptive.AdaptiveContext
 import com.khushu.data.adaptive.AdaptiveDuaSection
 import com.khushu.data.repo.KhushuContent
+import com.khushu.data.transport.ContentFetcher
 import com.khushu.engine.core.geo.Location
 import com.khushu.engine.KhushuEngine
 import java.time.Duration
@@ -157,12 +158,13 @@ internal class DayModelCache(private val capacity: Int = 4) {
 class KhushuOrchestrator(
     // `internal`: the wall. Hosts compose through the namespaces + [content]/
     // [downloads] delegation surfaces — direct engine/data calls (and their
-    // recomputation costs) are uncompilable from host code. The libraries
-    // remain fully usable standalone by OTHER consumers; hiding is
-    // orchestrator-scoped by design.
+    // recomputation costs) are uncompilable from host code.
     internal val engine: KhushuEngine = KhushuEngine(),
-    internal val data: KhushuContent,
+    /** Host transport decision (cache dir + fetcher) — the singleton's only construction input. */
+    fetcher: ContentFetcher,
 ) {
+    /** Content retrieval — absorbed from khushu-data-api (v1.4.0); package `com.khushu.data` retained. */
+    internal val data: KhushuContent = KhushuContent(fetcher)
     private val cache = DayModelCache()
 
     val dua = DuaNamespace(this)

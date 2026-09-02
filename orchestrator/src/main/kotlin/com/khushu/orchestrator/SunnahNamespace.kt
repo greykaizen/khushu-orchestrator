@@ -45,16 +45,10 @@ class SunnahNamespace internal constructor(private val o: KhushuOrchestrator) {
         return this
     }
 
-    /**
-     * Detach the corpora session. SQLite connections are reclaimed on the
-     * next [attach] (attachSunnah closes the previous session internally)
-     * or at process teardown. NOTE: full eager connection-close requires
-     * KhushuContent.closeSunnahOnly() (data-api v1.3.3) — that tag is
-     * currently un-buildable on JitPack (repo-size git-clone timeout), so
-     * this detach is reference-only until the dependency can move.
-     */
+    /** Release SQLite connections + the FTS index (eager close). */
     fun close() {
         attached = null
+        o.data.closeSunnahOnly()
     }
 
     private fun api(): SunnahApi =

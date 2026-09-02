@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.khushu.data.AtlasSliceTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-09-02T17:38:41.071Z" hostname="Shah" time="4.862">
+  <properties/>
+  <testcase name="uthmaniLayoutDocumentsCoverTheWordRegistry()" classname="com.khushu.data.AtlasSliceTest" time="2.633"/>
+  <testcase name="catalogListsAllThreeBundles()" classname="com.khushu.data.AtlasSliceTest" time="0.007"/>
+  <testcase name="facadeExposesAtlasThroughQuranApi()" classname="com.khushu.data.AtlasSliceTest" time="1.599"/>
+  <testcase name="uthmaniGlyphTableHasRectsAndBearings()" classname="com.khushu.data.AtlasSliceTest" time="0.208"/>
+  <testcase name="uthmaniMetaFontMetricsMatchKnownKfgqpcValues()" classname="com.khushu.data.AtlasSliceTest" time="0.083"/>
+  <testcase name="textureBytesArePng()" classname="com.khushu.data.AtlasSliceTest" time="0.31"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

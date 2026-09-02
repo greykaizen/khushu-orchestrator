@@ -12,12 +12,14 @@ repositories {
 kotlin { jvmToolchain(21) }
 
 dependencies {
-    // Composition layer: both family libraries cross this seam. `api` because
-    // public signatures expose engine and data-api types directly.
+    // Composition + serving layer: engine is the only family dependency left.
+    // `api` because public signatures expose engine types directly; the
+    // content-retrieval code (com.khushu.data.*) lives in THIS artifact.
     api("com.github.greykaizen.khushu-engine:engine-facade:2.0.0")
-    api("com.github.greykaizen:khushu-data-api:data-api-v1.3.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
-    implementation("com.squareup.okio:okio:3.9.0") // LocalFetcher signature (data-api api-dep gap)
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+    implementation("com.squareup.okio:okio:3.9.0")
+    api("org.xerial:sqlite-jdbc:3.46.1.0") // LocalHadithRepository reads distribution .db corpora
     testImplementation(kotlin("test"))
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }
@@ -31,12 +33,12 @@ publishing {
             from(components["java"])
             groupId = "com.khushu"
             artifactId = "orchestrator"
-            version = "1.3.1"
+            version = "1.4.0"
             pom {
                 name.set("Khushu Orchestrator")
                 description.set(
-                    "Composition layer for the Khushu family: engine computation x " +
-                        "data-api content, with the per-day model so hosts never recompute.",
+                    "Composition + serving layer for the Khushu family: engine computation, " +
+                        "content retrieval, and the per-day model so hosts never recompute.",
                 )
                 licenses {
                     license {

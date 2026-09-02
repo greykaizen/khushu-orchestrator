@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.khushu.data.QuranGlyphTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-09-02T17:39:00.372Z" hostname="Shah" time="0.091">
+  <properties/>
+  <testcase name="referenceDecorationsMatchUnicodeCodepoints()" classname="com.khushu.data.QuranGlyphTest" time="0.009"/>
+  <testcase name="fontsExistAndHadithNaskhCoversCorpusSpecials()" classname="com.khushu.data.QuranGlyphTest" time="0.007"/>
+  <testcase name="all114SurahIconsPresentAndNonSequential()" classname="com.khushu.data.QuranGlyphTest" time="0.006"/>
+  <testcase name="outOfRangeLookupsReturnNullNotCrash()" classname="com.khushu.data.QuranGlyphTest" time="0.008"/>
+  <testcase name="specialGlyphsMatchDonorCodepoints()" classname="com.khushu.data.QuranGlyphTest" time="0.005"/>
+  <testcase name="all30JuzIconsPresent()" classname="com.khushu.data.QuranGlyphTest" time="0.005"/>
+  <testcase name="surahIconAppendsPrefixAfterNumberGlyph()" classname="com.khushu.data.QuranGlyphTest" time="0.009"/>
+  <testcase name="ayahReferenceMatchesDonorComposition()" classname="com.khushu.data.QuranGlyphTest" time="0.024"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

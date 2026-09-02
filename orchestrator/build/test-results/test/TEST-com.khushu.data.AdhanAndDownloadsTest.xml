@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.khushu.data.AdhanAndDownloadsTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-09-02T17:38:40.688Z" hostname="Shah" time="0.375">
+  <properties/>
+  <testcase name="downloadsApiDegradesGracefullyWithoutCachingFetcher()" classname="com.khushu.data.AdhanAndDownloadsTest" time="0.02"/>
+  <testcase name="outOfRangeAdhanIsNull()" classname="com.khushu.data.AdhanAndDownloadsTest" time="0.036"/>
+  <testcase name="catalogHas178EntriesWithParsedMetadata()" classname="com.khushu.data.AdhanAndDownloadsTest" time="0.053"/>
+  <testcase name="reconcileDropsVanishedFiles()" classname="com.khushu.data.AdhanAndDownloadsTest" time="0.053"/>
+  <testcase name="recitersGroupAndPlaceAdhansAreLabeled()" classname="com.khushu.data.AdhanAndDownloadsTest" time="0.042"/>
+  <testcase name="islamicEventsExposeDisplayEntries()" classname="com.khushu.data.AdhanAndDownloadsTest" time="0.022"/>
+  <testcase name="cachingFetcherTracksCategoriesAndDeletes()" classname="com.khushu.data.AdhanAndDownloadsTest" time="0.03"/>
+  <testcase name="duaAudioMirrorsExposed()" classname="com.khushu.data.AdhanAndDownloadsTest" time="0.075"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

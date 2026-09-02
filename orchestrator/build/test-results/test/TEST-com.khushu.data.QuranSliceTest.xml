@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.khushu.data.QuranSliceTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-09-02T17:39:00.470Z" hostname="Shah" time="4.018">
+  <properties/>
+  <testcase name="navigationUnitsCoverTheWholeMushaf()" classname="com.khushu.data.QuranSliceTest" time="0.025"/>
+  <testcase name="pageOfAyahResolvesBothAddressingSchemes()" classname="com.khushu.data.QuranSliceTest" time="1.813"/>
+  <testcase name="arabicSearchFindsByNormalizedText()" classname="com.khushu.data.QuranSliceTest" time="0.918"/>
+  <testcase name="fatihaWordsAreWordLevelWithMarkerClassification()" classname="com.khushu.data.QuranSliceTest" time="0.022"/>
+  <testcase name="khushuContentFacadeWiresEverything()" classname="com.khushu.data.QuranSliceTest" time="0.152"/>
+  <testcase name="ayahMetaCarriesNavigationNumbers()" classname="com.khushu.data.QuranSliceTest" time="0.066"/>
+  <testcase name="indopakAndMonolithicKfqpcResolve()" classname="com.khushu.data.QuranSliceTest" time="0.045"/>
+  <testcase name="qpcPageOneLinesMatchKnownLayout()" classname="com.khushu.data.QuranSliceTest" time="0.725"/>
+  <testcase name="translationPacksParseFromFlatFiles()" classname="com.khushu.data.QuranSliceTest" time="0.021"/>
+  <testcase name="mushafRegistryMatchesDonorPageCounts()" classname="com.khushu.data.QuranSliceTest" time="0.009"/>
+  <testcase name="baqarahWordCountInExpectedBand()" classname="com.khushu.data.QuranSliceTest" time="0.021"/>
+  <testcase name="wordRegistryCoversAllAyahs()" classname="com.khushu.data.QuranSliceTest" time="0.165"/>
+  <testcase name="surahRegistryIsCompleteAndNamed()" classname="com.khushu.data.QuranSliceTest" time="0.012"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

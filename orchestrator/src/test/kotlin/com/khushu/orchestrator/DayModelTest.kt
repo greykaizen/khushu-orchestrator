@@ -6,7 +6,6 @@ import com.khushu.engine.core.geo.AltitudeMeters
 import com.khushu.engine.core.geo.Latitude
 import com.khushu.engine.core.geo.Location
 import com.khushu.engine.core.geo.Longitude
-import com.khushu.engine.KhushuEngine
 import java.io.File
 import java.time.Instant
 import java.time.LocalDate
@@ -40,7 +39,7 @@ class DayModelTest {
 
     private fun orchestrator(): KhushuOrchestrator {
         val fetcher = LocalFetcher(repoRoot.absolutePath.toPath())
-        return KhushuOrchestrator(engine = KhushuEngine(), data = com.khushu.data.repo.KhushuContent(fetcher))
+        return KhushuOrchestrator(fetcher = fetcher)
     }
 
     private fun key(settings: DaySettings = DaySettings()) = DayKey(londonLocation, date, london, settings)

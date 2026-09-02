@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.khushu.data.AyahBundleTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-09-02T17:38:45.937Z" hostname="Shah" time="1.363">
+  <properties/>
+  <testcase name="ayahBundleComposesAllRequestedTiers()" classname="com.khushu.data.AyahBundleTest" time="1.153"/>
+  <testcase name="ayahBundleTafsirFiltersToCoveringSegments()" classname="com.khushu.data.AyahBundleTest" time="0.153"/>
+  <testcase name="ayahBundleUnknownAyahYieldsEmptyStringsNotCrash()" classname="com.khushu.data.AyahBundleTest" time="0.026"/>
+  <testcase name="ayahBundleEmptySelectionsAreCheap()" classname="com.khushu.data.AyahBundleTest" time="0.015"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

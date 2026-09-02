@@ -1,17 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.khushu.orchestrator.FacadeV12Test" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-09-02T15:45:16.387Z" hostname="Shah" time="8.193">
+<testsuite name="com.khushu.orchestrator.FacadeV12Test" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-09-02T17:39:08.766Z" hostname="Shah" time="10.923">
   <properties/>
-  <testcase name="sunnahAttachServesSearchOverLocalCorpora()" classname="com.khushu.orchestrator.FacadeV12Test" time="0.373"/>
-  <testcase name="warmupPrebuildsDayAndBundle()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.095"/>
-  <testcase name="normalizedFallbackIsDeterministicAndPageCarriesUnresolvedCount()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.19"/>
-  <testcase name="renderableAyahMatchesPageLineContent()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.226"/>
-  <testcase name="adaptiveFlowEmitsThenWakesAtBoundaries()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.381"/>
-  <testcase name="prefetchPagesWarmTexturesThroughCachingTransport()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.168"/>
-  <testcase name="renderableAyahResolvesAlFatihaGlyphs()" classname="com.khushu.orchestrator.FacadeV12Test" time="0.776"/>
-  <testcase name="sajdahMarkerWordsResolveGlyphsViaNormalizedFallback()" classname="com.khushu.orchestrator.FacadeV12Test" time="0.968"/>
+  <testcase name="sunnahAttachServesSearchOverLocalCorpora()" classname="com.khushu.orchestrator.FacadeV12Test" time="0.176"/>
+  <testcase name="warmupPrebuildsDayAndBundle()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.479"/>
+  <testcase name="normalizedFallbackIsDeterministicAndPageCarriesUnresolvedCount()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.726"/>
+  <testcase name="renderableAyahMatchesPageLineContent()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.796"/>
+  <testcase name="adaptiveFlowEmitsThenWakesAtBoundaries()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.425"/>
+  <testcase name="prefetchPagesWarmTexturesThroughCachingTransport()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.863"/>
+  <testcase name="renderableAyahResolvesAlFatihaGlyphs()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.117"/>
+  <testcase name="sajdahMarkerWordsResolveGlyphsViaNormalizedFallback()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.323"/>
   <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[SLF4J: Failed to load class "org.slf4j.impl.StaticLoggerBinder".
-SLF4J: Defaulting to no-operation (NOP) logger implementation
-SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further details.
-]]></system-err>
+  <system-err><![CDATA[]]></system-err>
 </testsuite>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.khushu.data.CatalogAndCuratedTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-09-02T17:38:47.305Z" hostname="Shah" time="0.61">
+  <properties/>
+  <testcase name="exclusiveVerseSetsCarryRefsAndLocalizedTitles()" classname="com.khushu.data.CatalogAndCuratedTest" time="0.055"/>
+  <testcase name="fontsCatalogParsesWithAllDonorFonts()" classname="com.khushu.data.CatalogAndCuratedTest" time="0.031"/>
+  <testcase name="translationCatalogParsesAllPacks()" classname="com.khushu.data.CatalogAndCuratedTest" time="0.038"/>
+  <testcase name="scienceTopicsLoad()" classname="com.khushu.data.CatalogAndCuratedTest" time="0.012"/>
+  <testcase name="topicTaxonomyLoads()" classname="com.khushu.data.CatalogAndCuratedTest" time="0.186"/>
+  <testcase name="wbwCatalogsParseWithRepoRelativeUrls()" classname="com.khushu.data.CatalogAndCuratedTest" time="0.021"/>
+  <testcase name="similarVersesResolve()" classname="com.khushu.data.CatalogAndCuratedTest" time="0.063"/>
+  <testcase name="mutashabihatPhrasesAndOccurrences()" classname="com.khushu.data.CatalogAndCuratedTest" time="0.066"/>
+  <testcase name="recommendedRulesAndTextsLoad()" classname="com.khushu.data.CatalogAndCuratedTest" time="0.032"/>
+  <testcase name="recitationTimingUrlsAreRepoRelative()" classname="com.khushu.data.CatalogAndCuratedTest" time="0.016"/>
+  <testcase name="tafsirCatalogParses()" classname="com.khushu.data.CatalogAndCuratedTest" time="0.012"/>
+  <testcase name="facadeCatalogAndCuratedWire()" classname="com.khushu.data.CatalogAndCuratedTest" time="0.02"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,12 +1,10 @@
 package com.khushu.orchestrator
 
 import com.khushu.data.transport.LocalFetcher
-import com.khushu.engine.KhushuEngine
 import com.khushu.engine.core.geo.AltitudeMeters
 import com.khushu.engine.core.geo.Latitude
 import com.khushu.engine.core.geo.Location
 import com.khushu.engine.core.geo.Longitude
-import com.khushu.data.repo.KhushuContent
 import okio.Path.Companion.toPath
 import java.io.File
 import java.time.Instant
@@ -44,7 +42,7 @@ class FacadeV12Test {
     private val date = LocalDate.of(2026, 6, 1)
 
     private fun orchestrator() =
-        KhushuOrchestrator(KhushuEngine(), KhushuContent(LocalFetcher(repoRoot.absolutePath.toPath())))
+        KhushuOrchestrator(fetcher = LocalFetcher(repoRoot.absolutePath.toPath()))
 
     private fun key() = DayKey(loc, date, london, DaySettings())
 
@@ -146,7 +144,7 @@ class FacadeV12Test {
         // CachingFetcher-backed orchestrator: second warm must skip network
         val cacheDir = File(repoRoot, "build/orch-texture-test-cache").apply { mkdirs() }
         val caching = com.khushu.data.transport.CachingFetcher(cacheDir, LocalFetcher(repoRoot.absolutePath.toPath()))
-        val o = KhushuOrchestrator(KhushuEngine(), KhushuContent(caching))
+        val o = KhushuOrchestrator(fetcher = caching)
 
         o.mushaf.prefetchPages("qpc", "uthmani", 1..2, includeTextures = true)
 

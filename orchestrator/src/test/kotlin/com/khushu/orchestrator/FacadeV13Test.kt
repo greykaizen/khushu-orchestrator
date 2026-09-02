@@ -1,9 +1,7 @@
 package com.khushu.orchestrator
 
-import com.khushu.data.repo.KhushuContent
 import com.khushu.data.transport.LocalFetcher
 import okio.Path.Companion.toPath
-import com.khushu.engine.KhushuEngine
 import com.khushu.engine.core.geo.AltitudeMeters
 import com.khushu.engine.core.geo.Latitude
 import com.khushu.engine.core.geo.Location
@@ -42,7 +40,7 @@ class FacadeV13Test {
     private val date = LocalDate.of(2026, 6, 1)
 
     private fun orchestrator() =
-        KhushuOrchestrator(KhushuEngine(), KhushuContent(LocalFetcher(repoRoot.absolutePath.toPath())))
+        KhushuOrchestrator(fetcher = LocalFetcher(repoRoot.absolutePath.toPath()))
 
     private fun key() = DayKey(loc, date, london, DaySettings())
 

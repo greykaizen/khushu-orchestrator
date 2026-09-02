@@ -17,6 +17,12 @@ Hosts add **one** coordinate and receive both libraries transitively.
 
 ## 2. What the orchestrator IS
 
+> **Family shape (v1.4.0+):** TWO repos remain. `khushu-engine` computes;
+> this repo serves + composes (the `com.khushu.data.*` retrieval code was
+> absorbed from khushu-data-api — that coordinate is retired; its data side
+> lives on as the content store). The host adds one coordinate and touches
+> nothing else.
+
 1. **Composites** — named functions of the shape *fetch facts (data-api) + apply math (engine) → immutable result*. Nothing else. Any function needing new domain knowledge belongs in a library, not here.
 2. **The DayModel** — one cached immutable plan per `(Location, LocalDate, ZoneId, params)`. All derived per-day values (prayer anchors, adaptive dua windows, event overlays) are computed once and served by lookup for the rest of the day. Hosts never recompute; triggers (prayer entry, window expiry) are precomputed boundary instants.
 3. **Flow coordinators** — e.g. `dua.adaptiveFlow` wakes exactly at precomputed boundaries (prayer entry, window end) and re-serves from the DayModel — no polling arithmetic, no push between libraries.
@@ -26,6 +32,7 @@ Hosts add **one** coordinate and receive both libraries transitively.
 - Not a god facade: no generic `execute(recipe)`, no rule systems. Flat namespaces of named composites.
 - Not a cache of last resort: caching semantics per capability use documented keys (engine CachedEngine + data-api CachingFetcher stay authoritative for their own facts); the DayModel caches only composed per-day facts keyed by everything that affects them.
 - Not a domain owner: no fiqh, no content curation — schools positions are parameters selected by the host, provenance documented in the libraries that own them.
+- Not a data store: the content corpus (inventory/, assets/) lives in the content checkout — this repo serves it over the injected ContentFetcher; corpora are never committed here.
 
 ## 4. Composite catalog v1.0.0
 

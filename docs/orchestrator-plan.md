@@ -127,7 +127,18 @@ applied per call (trivial arithmetic, no cache inflation by screen size).
 | P3 | khushu-orchestrator v1.0.0 | DayModel + dua/calendar/mushaf composites; virtual-time tests green |
 | P4 | host swap | host adds one coordinate; blocks consume composites |
 
-## 8. Guardrails
+## 8. Absorption (v1.4.0)
+
+The khushu-data-api JitPack coordinate is retired: its retrieval code
+(com.khushu.data.*) was absorbed into this artifact (packages retained), its
+content corpus remains the content checkout (served via the injected
+ContentFetcher; never committed here). Reason: the data repo grew past
+JitPack's git-clone timeout — the API could no longer ship. Family shape is
+now: engine (compute) · orchestrator (serve + compose) · content checkout
+(data). data-api-v1.3.2 was the last consumed coordinate; v1.3.3 dissolved
+(closeSunnahOnly shipped in v1.4.0).
+
+## 9. Guardrails
 
 - Composites-only doctrine (no god orchestrator) — ADR-01.
 - Engine stays locked; any mushaf delta requires golden evidence first.

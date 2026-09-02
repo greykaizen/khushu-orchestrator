@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.khushu.data.AdaptiveAndPlansTest" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-09-02T17:38:35.728Z" hostname="Shah" time="4.949">
+  <properties/>
+  <testcase name="bedtimeBeforeMidnightWinsWindow()" classname="com.khushu.data.AdaptiveAndPlansTest" time="2.078"/>
+  <testcase name="batchDownloadFetchesSkipsAndVerifies()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.643"/>
+  <testcase name="variantRotatesBackfillDeterministically()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.189"/>
+  <testcase name="afterSalahWindowOutranksMorning()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.065"/>
+  <testcase name="duaModelCarriesSubcategory()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.098"/>
+  <testcase name="noAnchorsYieldsAnytimeOnly()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.065"/>
+  <testcase name="morningWindowReturnsMorningFirst()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.068"/>
+  <testcase name="bookReadMatchesMetadataHadithCount()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.033"/>
+  <testcase name="beforeSleepUsesHostBedtime()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.075"/>
+  <testcase name="planFactoriesProduceRealUnitsWithSizes()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.255"/>
+  <testcase name="ledgerLoadsFromPipelineManifest()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.105"/>
+  <testcase name="maxSectionsHonored()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.082"/>
+  <testcase name="shaMismatchFailsLoudly()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.123"/>
+  <testcase name="bookIndexListsAllBukhariBooksWithCounts()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.082"/>
+  <testcase name="eveningWindowByMaghribDefault()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.042"/>
+  <testcase name="perBookFileIsSmallFastLoadUnit()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.014"/>
+  <testcase name="tahajjudWindowCrossesMidnight()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.065"/>
+  <testcase name="duaAudioPlanPathsExistInLedger()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.112"/>
+  <testcase name="eveningStartAsrPolicyShiftsWindow()" classname="com.khushu.data.AdaptiveAndPlansTest" time="0.065"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
