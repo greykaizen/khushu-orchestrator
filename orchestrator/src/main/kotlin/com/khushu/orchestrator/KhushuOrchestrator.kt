@@ -10,6 +10,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -120,6 +121,9 @@ internal class DayModelCache(private val capacity: Int = 4) {
     private val mutex = Mutex()
     private val map = LinkedHashMap<DayKey, DayModel>(capacity, 0.75f, true)
 
+    /** Non-blocking peek — null when absent (no build). */
+    fun peek(key: DayKey): DayModel? = map[key]
+
     suspend fun get(key: DayKey, build: suspend (DayKey) -> DayModel): DayModel =
         mutex.withLock {
             map[key]?.let { return it }
@@ -162,6 +166,7 @@ class KhushuOrchestrator(
     private val cache = DayModelCache()
 
     val dua = DuaNamespace(this)
+    val prayer = PrayerNamespace(this)
     val calendar = CalendarNamespace(this)
     val mushaf = MushafNamespace(this)
 
@@ -202,6 +207,14 @@ class KhushuOrchestrator(
         }
         mushafBundle?.let { bundleSpec -> mushaf.prefetchPages(bundleSpec.first, bundleSpec.second, mushafPages) }
     }
+
+    /**
+     * Blocking day-model access for synchronous namespaces: cache hit = O(1)
+     * return (the steady state after [warmup]); cache miss = one suspending
+     * build bridged with runBlocking — bounded, and only on the cold path.
+     */
+    fun dayModelSync(key: DayKey): DayModel =
+        cache.peek(key) ?: runBlocking { dayModel(key) }
 
     private suspend fun build(key: DayKey): DayModel {
         // Slug-index the corpus once per build: every probe-point evaluation

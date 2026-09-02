@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.khushu.orchestrator.FacadeV12Test" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-09-02T01:32:28.572Z" hostname="Shah" time="7.747">
+<testsuite name="com.khushu.orchestrator.FacadeV12Test" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-09-02T11:07:04.153Z" hostname="Shah" time="6.412">
   <properties/>
-  <testcase name="sunnahAttachServesSearchOverLocalCorpora()" classname="com.khushu.orchestrator.FacadeV12Test" time="0.528"/>
-  <testcase name="warmupPrebuildsDayAndBundle()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.65"/>
-  <testcase name="renderableAyahMatchesPageLineContent()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.529"/>
-  <testcase name="adaptiveFlowEmitsThenWakesAtBoundaries()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.384"/>
-  <testcase name="prefetchPagesWarmTexturesThroughCachingTransport()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.646"/>
-  <testcase name="renderableAyahResolvesAlFatihaGlyphs()" classname="com.khushu.orchestrator.FacadeV12Test" time="0.995"/>
+  <testcase name="sunnahAttachServesSearchOverLocalCorpora()" classname="com.khushu.orchestrator.FacadeV12Test" time="0.444"/>
+  <testcase name="warmupPrebuildsDayAndBundle()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.236"/>
+  <testcase name="renderableAyahMatchesPageLineContent()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.143"/>
+  <testcase name="adaptiveFlowEmitsThenWakesAtBoundaries()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.369"/>
+  <testcase name="prefetchPagesWarmTexturesThroughCachingTransport()" classname="com.khushu.orchestrator.FacadeV12Test" time="1.454"/>
+  <testcase name="renderableAyahResolvesAlFatihaGlyphs()" classname="com.khushu.orchestrator.FacadeV12Test" time="0.756"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[SLF4J: Failed to load class "org.slf4j.impl.StaticLoggerBinder".
 SLF4J: Defaulting to no-operation (NOP) logger implementation
