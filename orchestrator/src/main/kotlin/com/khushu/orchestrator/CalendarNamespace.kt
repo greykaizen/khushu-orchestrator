@@ -32,7 +32,6 @@ class CalendarNamespace internal constructor(private val o: KhushuOrchestrator) 
      */
     suspend fun eventsFor(
         range: List<LocalDate>,
-        zoneId: ZoneId,
         hijriOffsetDays: Int = 0,
     ): List<LocatedDay> = range.map { date ->
         val hijri = o.engine.calendar.hijri(date, hijriOffsetDays)

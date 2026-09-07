@@ -1,0 +1,11 @@
+# Build outputs
+build/
+orchestrator/build/
+.gradle/
+
+# IDE
+.idea/
+
+# Kotlin
+*.class
+.kotlin/

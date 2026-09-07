@@ -184,7 +184,13 @@ class AtlasBundleSource(
     private val fetcher: ContentFetcher,
     private val catalog: AtlasCatalogSource,
 ) {
-    private val zipCache = HashMap<String, ByteArray>()
+    // Bundle zips are the multi-MB payloads — LRU-capped so a host touching
+    // every bundle can't accumulate hundreds of MB (v1.6.0). Eviction costs a
+    // re-fetch (a cache-hit once CachingFetcher is wired). Parsed JSON caches
+    // stay unbounded: bounded by the catalog's small bundle count.
+    private val zipCache = object : LinkedHashMap<String, ByteArray>(0, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>) = size > 2
+    }
     private val metaCache = HashMap<String, AtlasMetaRoot>()
     private val layerCache = HashMap<String, AtlasLayerRoot>()
     private val layoutCache = HashMap<String, AtlasLayoutRoot>()

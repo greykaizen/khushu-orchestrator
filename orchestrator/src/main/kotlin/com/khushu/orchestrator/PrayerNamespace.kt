@@ -7,7 +7,6 @@ import java.time.LocalDate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +20,9 @@ import kotlinx.coroutines.flow.asStateFlow
  * NOTIFICATION CONTRACT: this namespace computes WHEN; the host schedules
  * HOW (AlarmManager/channels/boot-restore stay host-side — family doctrine:
  * notifications/scheduling are caller-side).
+ *
+ * All members are suspend (v1.4.2): cold-path day builds fetch content and
+ * must never runBlocking on the caller's thread.
  */
 class PrayerNamespace internal constructor(private val o: KhushuOrchestrator) {
 
@@ -28,8 +30,11 @@ class PrayerNamespace internal constructor(private val o: KhushuOrchestrator) {
      * Current prayer state at [now], derived from the DayModel's cached
      * [com.khushu.engine.prayer.PrayerTimesResult] — the engine's own
      * [PrayerStatus] shape (same API, no recomputation).
+     *
+     * Suspend (v1.4.2): a cold cache builds the day model here instead of
+     * runBlocking network I/O on the caller's thread.
      */
-    fun status(key: DayKey, now: Instant): PrayerStatus =
+    suspend fun status(key: DayKey, now: Instant): PrayerStatus =
         deriveStatus(key, now)
 
     /**
@@ -47,19 +52,19 @@ class PrayerNamespace internal constructor(private val o: KhushuOrchestrator) {
         timeScale: Double = 1.0,
     ): StateFlow<PrayerStatus> {
         require(timeScale > 0) { "timeScale must be positive" }
-        val state = MutableStateFlow(deriveStatus(key, startNow))
+        val state = MutableStateFlow(PrayerStatus(null, null, null, null, startNow))
         scope.launch {
             var now = startNow
             var currentKey = key
             while (true) {
                 state.value = deriveStatus(currentKey, now)
-                val boundary = o.dayModelSync(currentKey).nextBoundary(now)
+                val boundary = o.dayModel(currentKey).nextBoundary(now)
                 val waitMs = when (boundary) {
                     null -> (maxWait.toMillis() / timeScale).toLong().coerceAtLeast(50L)
                     else -> (Duration.between(now, boundary).toMillis() / timeScale)
                         .toLong().coerceIn(50L, (maxWait.toMillis() / timeScale).toLong())
                 }
-                withTimeoutOrNull(waitMs) { delay(Long.MAX_VALUE) }
+                delay(waitMs)
                 now = nowNow()
                 // Track the civil date of `now` in BOTH directions — the plan
                 // of the day the instant belongs to is the one that serves.
@@ -77,12 +82,19 @@ class PrayerNamespace internal constructor(private val o: KhushuOrchestrator) {
      * Reads today's DayModel plus tomorrow's when the schedule crosses
      * midnight. Sorted ascending, first [count] entries at/after [from].
      */
-    fun alarmSchedule(key: DayKey, from: Instant, count: Int): List<AlarmInstant> {
+    suspend fun alarmSchedule(key: DayKey, from: Instant, count: Int): List<AlarmInstant> {
         require(count in 1..20) { "count must be 1..20" }
         val out = mutableListOf<AlarmInstant>()
         var date = key.date
+        var scanned = 0
         while (out.size < count) {
-            val times = o.dayModelSync(
+            // v1.4.2: polar day/night yields all-null raw times — the old loop
+            // advanced dates forever. 400 days bounds any real schedule.
+            check(++scanned <= 400) {
+                "alarmSchedule: no computable prayer times within 400 days of ${key.date} " +
+                    "at ${key.location} (polar day/night?)"
+            }
+            val times = o.dayModel(
                 if (date == key.date) key else key.copy(date = date),
             ).prayerTimes
             for (kind in PrayerOrder) {
@@ -96,34 +108,24 @@ class PrayerNamespace internal constructor(private val o: KhushuOrchestrator) {
 
     // ── status derivation (pure, over cached times) ───────────────────────
 
-    private fun deriveStatus(key: DayKey, now: Instant): PrayerStatus {
+    private suspend fun deriveStatus(key: DayKey, now: Instant): PrayerStatus {
         val civilDate = java.time.ZonedDateTime.ofInstant(now, key.zoneId).toLocalDate()
-        val civilModel = o.dayModelSync(key.copy(date = civilDate))
+        val civilModel = o.dayModel(key.copy(date = civilDate))
         val fajr = civilModel.prayerTimes.fajr.raw
         // Chain-extension: `now` beyond this model's chain end (into tomorrow's
         // fajr→sunrise window) or before its start (yesterday's isha tail) —
         // derive from the neighbouring day's chain.
         return when {
-            civilModel.nextFajr != null && now.isAfter(civilModel.nextFajr) ->
-                derive(neighbourEntries(o.dayModelSync(key.copy(date = civilDate.plusDays(1)))), now)
-            fajr != null && now.isBefore(fajr) ->
-                derive(neighbourEntries(o.dayModelSync(key.copy(date = civilDate.minusDays(1)))), now)
+            civilModel.nextFajr != null && now.isAfter(civilModel.nextFajr) -> {
+                val next = o.dayModel(key.copy(date = civilDate.plusDays(1)))
+                derive(entriesOf(next, next.nextFajr), now)
+            }
+            fajr != null && now.isBefore(fajr) -> {
+                val prev = o.dayModel(key.copy(date = civilDate.minusDays(1)))
+                derive(entriesOf(prev, prev.nextFajr), now)
+            }
             else -> derive(entriesOf(civilModel, civilModel.nextFajr), now)
         }
-    }
-
-    /** Neighbour-day chain (full entry list; its own nextFajr edge irrelevant near `now`). */
-    private fun neighbourEntries(model: DayModel): List<Pair<PrayerStatus.Prayer, Instant>> {
-        val t = model.prayerTimes
-        return buildList {
-            t.fajr.raw?.let { add(PrayerStatus.Prayer.FAJR to it) }
-            t.sunrise.raw?.let { add(PrayerStatus.Prayer.SUNRISE to it) }
-            t.dhuhr.raw?.let { add(PrayerStatus.Prayer.DHUHR to it) }
-            t.asr.raw?.let { add(PrayerStatus.Prayer.ASR to it) }
-            t.maghrib.raw?.let { add(PrayerStatus.Prayer.MAGHRIB to it) }
-            t.isha.raw?.let { add(PrayerStatus.Prayer.ISHA to it) }
-            model.nextFajr?.let { add(PrayerStatus.Prayer.FAJR to it) }
-        }.sortedBy { it.second }
     }
 
     private fun entriesOf(

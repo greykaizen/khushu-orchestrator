@@ -21,8 +21,8 @@ class HadithSliceTest {
             .firstOrNull { File(it, "inventory/hadiths").exists() }
             // absorbed-test resolver: content corpus lives in the sibling checkout
             ?: generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
-                .firstOrNull { File(it, "khushu-quran-data/inventory/hadiths").exists() }
-                ?.let { File(it, "khushu-quran-data") }!!
+                .firstOrNull { File(it, "khushu-data-api/inventory/hadiths").exists() }
+                ?.let { File(it, "khushu-data-api") }!!
             .resolve("inventory/hadiths")
 
     private val scholarsDb = corporaRoot.resolve("scholars_info.db")

@@ -33,9 +33,9 @@ class FacadeV12Test {
         generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
             .firstOrNull { File(it, "assets/dua_dhikr/dua_data.json").exists() }
             ?: generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
-                .firstOrNull { File(it, "khushu-quran-data/assets/dua_dhikr/dua_data.json").exists() }
-                ?.let { File(it, "khushu-quran-data") }
-            ?: error("khushu-quran-data repo root not found")
+                .firstOrNull { File(it, "khushu-data-api/assets/dua_dhikr/dua_data.json").exists() }
+                ?.let { File(it, "khushu-data-api") }
+            ?: error("khushu-data-api repo root not found")
 
     private val london = ZoneId.of("Europe/London")
     private val loc = Location(Latitude(51.5074), Longitude(-0.1278), AltitudeMeters(11.0))

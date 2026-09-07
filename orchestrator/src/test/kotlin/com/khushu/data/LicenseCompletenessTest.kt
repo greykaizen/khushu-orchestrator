@@ -16,8 +16,8 @@ class LicenseCompletenessTest {
             .firstOrNull { File(it, "LICENSE-CONTENT.md").exists() }
             // absorbed-test resolver: content corpus lives in the sibling checkout
             ?: generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
-                .firstOrNull { File(it, "khushu-quran-data/LICENSE-CONTENT.md").exists() }
-                ?.let { File(it, "khushu-quran-data") }
+                .firstOrNull { File(it, "khushu-data-api/LICENSE-CONTENT.md").exists() }
+                ?.let { File(it, "khushu-data-api") }
             ?: error("repo root (LICENSE-CONTENT.md) not found from user.dir")
 
     /** First-cell table paths reduced to directory prefixes (glob segments dropped). */

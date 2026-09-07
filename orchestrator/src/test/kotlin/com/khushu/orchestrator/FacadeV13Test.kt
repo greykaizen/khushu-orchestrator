@@ -19,7 +19,9 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -31,9 +33,9 @@ class FacadeV13Test {
         generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
             .firstOrNull { File(it, "assets/dua_dhikr/dua_data.json").exists() }
             ?: generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
-                .firstOrNull { File(it, "khushu-quran-data/assets/dua_dhikr/dua_data.json").exists() }
-                ?.let { File(it, "khushu-quran-data") }
-            ?: error("khushu-quran-data repo root not found")
+                .firstOrNull { File(it, "khushu-data-api/assets/dua_dhikr/dua_data.json").exists() }
+                ?.let { File(it, "khushu-data-api") }
+            ?: error("khushu-data-api repo root not found")
 
     private val london = ZoneId.of("Europe/London")
     private val loc = Location(Latitude(51.5074), Longitude(-0.1278), AltitudeMeters(11.0))
@@ -130,6 +132,25 @@ class FacadeV13Test {
     }
 
     @Test
+    fun alarmScheduleTerminatesOrThrowsAtPolarLocation() = runBlocking {
+        // v1.4.2 regression: all-null prayer times (polar) looped forever.
+        // The 400-day scan cap must surface as an IllegalStateException.
+        val o = orchestrator()
+        val oslo = ZoneId.of("Europe/Oslo")
+        val tromso = Location(Latitude(69.6492), Longitude(18.9553), AltitudeMeters(10.0))
+        val polarKey = DayKey(tromso, LocalDate.of(2026, 12, 21), oslo, DaySettings())
+        val from = LocalDate.of(2026, 12, 21).atStartOfDay(oslo).toInstant()
+        val result = runCatching { o.prayer.alarmSchedule(polarKey, from, count = 5) }
+        if (result.isFailure) {
+            assertTrue(result.exceptionOrNull() is IllegalStateException, "cap must throw ISE")
+        } else {
+            // dhuhr remains computable at the pole (transit) — the loop must
+            // still terminate with real entries, never hang.
+            assertTrue(result.getOrNull()!!.isNotEmpty())
+        }
+    }
+
+    @Test
     fun alarmScheduleFivePrayersPerDay() = runBlocking {
         val o = orchestrator()
         // probe from May 31 evening: first 5 entries = the full June-1 sequence
@@ -184,5 +205,50 @@ class FacadeV13Test {
         // display join: any event entries for this hijri day come from the data-api corpus
         val expected = o.content.islamicEventsForHijriMonth(hijri.month).filter { it.hijriDay == hijri.day }
         assertEquals(expected.size, firstOfDay.displayEvents.size)
+    }
+
+    // ── v1.6.0: wall completion — quran search + lifecycle ────────────────
+
+    @Test
+    fun quranSearchServesThroughTheWall() = runBlocking {
+        val o = orchestrator()
+        // Same golden query as the data-layer QuranSliceTest FTS contract.
+        val hits = o.content.quranSearch("الرحمن الرحيم", limit = 5)
+        assertTrue(hits.isNotEmpty(), "FTS must serve الرحمن الرحيم through the wall")
+        // Donor-parity assertion (QuranSliceTest): al-Fatihah 1 is among the hits.
+        assertTrue(hits.any { it.surahNo == 1 && it.ayahNo == 1 })
+        assertTrue(hits.all { it.text.isNotBlank() })
+    }
+
+    @Test
+    fun quranSearchIsConcurrencySafe() = runBlocking {
+        // Two concurrent first-calls must not race the index into existence
+        // (v1.6.0: the old lazy init could leak a second connection + index).
+        val o = orchestrator()
+        val hits = coroutineScope {
+            listOf(
+                async { o.content.quranSearch("الله") },
+                async { o.content.quranSearch("الناس") },
+            ).map { it.await() }
+        }
+        assertTrue(hits.all { it.isNotEmpty() })
+        o.close()
+        // After close, a fresh search rebuilds the (in-memory) index — the
+        // instance stays usable rather than crashing on a closed connection.
+        assertTrue(o.content.quranSearch("الله", limit = 3).isNotEmpty())
+    }
+
+    @Test
+    fun closeDrainsSqlThenReleasesAndSunnahReattaches() = runBlocking {
+        val o = orchestrator()
+        val corporaRoot = File(repoRoot, "inventory/hadiths")
+        val sideIndex = File(repoRoot, "build/sunnah-search-index.db")
+        o.sunnah.attach(corporaRoot, searchIndexDb = sideIndex)
+        assertNotNull(o.sunnah.hadith("bukhari_urn_100010", lang = "en"))
+        o.close()
+        // close() released the corpora; a fresh attach reopens them cleanly.
+        o.sunnah.attach(corporaRoot, searchIndexDb = sideIndex)
+        assertNotNull(o.sunnah.hadith("bukhari_urn_100010", lang = "en"))
+        o.sunnah.close()
     }
 }

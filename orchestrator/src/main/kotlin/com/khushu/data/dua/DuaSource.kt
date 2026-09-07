@@ -23,9 +23,17 @@ class DuaSource(
     private val baseDir: String = "assets/dua_dhikr",
 ) {
     private val json = Json { ignoreUnknownKeys = true }
-    private var duasCache: List<Dua>? = null
-    private var categoriesCache: List<DuaCategory>? = null
-    private var articleIndexCache: List<DuaArticleCategory>? = null
+    @Volatile private var duasCache: List<Dua>? = null
+    @Volatile private var categoriesCache: List<DuaCategory>? = null
+    @Volatile private var articleIndexCache: List<DuaArticleCategory>? = null
+
+    /** Probed local-audio paths (nullable: id 293 has a url but no mirror). */
+    private val audioPathCache = HashMap<Int, String?>()
+
+    /** Played-audio bytes — access-ordered, capped (ponytail: raise cap for playlist prefetch). */
+    private val audioMemo = object : LinkedHashMap<Int, ByteArray>(0, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, ByteArray>) = size > 4
+    }
 
     /** All 491 duas (cached). Filter client-side, or use [bySubcategory]. */
     suspend fun duas(): List<Dua> = duasCache ?: run {
@@ -126,18 +134,28 @@ class DuaSource(
 
     /**
      * Repo-relative path of the local opus mirror (`dua_{id}.opus`) when it
-     * ships in the bundle; null for the 3 entries without local audio.
-     * Mirrors are byte-identical donor audio (no re-encode; Opus decodes on
-     * Android 12+ via Media3/ExoPlayer).
+     * ships in the bundle; null otherwise (ids 52/191 ship no audio; id 293
+     * has a remote url only).
+     *
+     * v1.4.2: probes via [ContentFetcher.exists] — the old version downloaded
+     * the ENTIRE opus just to test existence (and [audio] then fetched it
+     * again: 2× network per dua). Results are memoized.
      */
     suspend fun localAudioPath(id: Int): String? {
         if (dua(id) == null) return null
-        return runCatching {
-            fetcher.fetch("$baseDir/dua_$id.opus")
-            "$baseDir/dua_$id.opus"
-        }.getOrNull()
+        synchronized(audioPathCache) { if (audioPathCache.containsKey(id)) return audioPathCache[id] }
+        val p = "$baseDir/dua_$id.opus"
+        val result = if (fetcher.exists(p)) p else null
+        synchronized(audioPathCache) { audioPathCache[id] = result }
+        return result
     }
 
-    /** Opus bytes of the local mirror, or null. */
-    suspend fun audio(id: Int): ByteArray? = localAudioPath(id)?.let { fetcher.fetch(it) }
+    /** Opus bytes of the local mirror, or null. Fetched once, then memoized. */
+    suspend fun audio(id: Int): ByteArray? {
+        val path = localAudioPath(id) ?: return null
+        synchronized(audioMemo) { audioMemo[id]?.let { return it } }
+        val bytes = fetcher.fetch(path)
+        synchronized(audioMemo) { audioMemo[id] = bytes }
+        return bytes
+    }
 }

@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.security.MessageDigest
 
 /**
  * Download-tracking + disk-caching decorator over any [ContentFetcher].
@@ -24,6 +25,11 @@ import java.io.File
  * - The manifest (`downloads_manifest.json`) lives INSIDE the cache dir —
  *   clearing the dir clears everything, atomically.
  * - Categories derive from path prefixes so per-tier deletion is a filter.
+ *
+ * Concurrency (v1.4.2): every manifest access — reads, writes, load, flush —
+ * serializes on [lock]; the manifest itself is flushed atomically
+ * (temp file + rename), so a crash mid-flush leaves the previous manifest
+ * intact instead of a truncated JSON.
  */
 class CachingFetcher(
     private val cacheDir: File,
@@ -33,7 +39,10 @@ class CachingFetcher(
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = false }
     private val manifestFile = File(cacheDir, MANIFEST_NAME)
     private val manifest = mutableMapOf<String, ManifestRow>()
-    private val loaded = AtomicBool(false)
+    private val lock = Any()
+
+    @Volatile
+    private var loaded = false
 
     @Serializable
     data class ManifestRow(
@@ -49,24 +58,38 @@ class CachingFetcher(
 
     override suspend fun fetch(path: String): ByteArray {
         ensureLoaded()
-        val cached = manifest[path]
+        val cached = synchronized(lock) { manifest[path] }
         if (cached != null) {
             val f = fileFor(path)
-            if (f.isFile) {
-                return f.readBytes()
-            }
             // manifest claims it but the file vanished (user cleared?) — refetch
+            runCatching { return f.readBytes() }
         }
         val bytes = delegate.fetch(path)
         persist(path, bytes)
         return bytes
     }
 
+    /**
+     * Cheap existence probe: manifest/disk first, then the delegate.
+     * Honors the honest-exists contract — only [ContentMissingException]
+     * maps to `false`; transport failures propagate (v1.6.0).
+     */
+    override suspend fun exists(path: String): Boolean {
+        ensureLoaded()
+        val tracked = synchronized(lock) { manifest.containsKey(path) }
+        if (tracked && fileFor(path).isFile) return true
+        return try {
+            fetch(path); true
+        } catch (e: ContentMissingException) {
+            false
+        }
+    }
+
     // ── tracking surface ────────────────────────────────────────────────────
 
     /** All persisted downloads with categories. */
-    fun downloads(): DownloadsSnapshot {
-        ensureLoaded()
+    fun downloads(): DownloadsSnapshot = synchronized(lock) {
+        ensureLoadedLocked()
         val items = manifest.entries.map { (path, row) ->
             DownloadedItemView(
                 path = path,
@@ -76,7 +99,7 @@ class CachingFetcher(
                 sha256 = row.sha256,
             )
         }.sortedBy { it.path }
-        return DownloadsSnapshot(
+        DownloadsSnapshot(
             items = items,
             totalBytes = items.sumOf { it.bytes },
             bytesByCategory = items.groupBy { it.category }
@@ -88,8 +111,8 @@ class CachingFetcher(
      * Delete persisted items matching [predicate] (e.g. by category), freeing
      * their disk space. Returns the number of items removed.
      */
-    fun deleteWhere(predicate: (DownloadedItemView) -> Boolean): Int {
-        ensureLoaded()
+    fun deleteWhere(predicate: (DownloadedItemView) -> Boolean): Int = synchronized(lock) {
+        ensureLoadedLocked()
         var removed = 0
         val doomed = manifest.entries
             .map { (path, row) -> row.toView(path, categoryOf(path)) }
@@ -99,23 +122,23 @@ class CachingFetcher(
             manifest.remove(view.path)
             removed++
         }
-        flush()
-        return removed
+        flushLocked()
+        removed
     }
 
     /** Wipe every persisted download (manifest + files). */
-    fun clearAll(): Int {
-        ensureLoaded()
+    fun clearAll(): Int = synchronized(lock) {
+        ensureLoadedLocked()
         val n = manifest.size
         for (path in manifest.keys) fileFor(path).delete()
         manifest.clear()
-        flush()
-        return n
+        flushLocked()
+        n
     }
 
     /** Re-hash persisted files and drop manifest rows whose bytes vanished. */
-    fun reconcile(): Int {
-        ensureLoaded()
+    fun reconcile(): Int = synchronized(lock) {
+        ensureLoadedLocked()
         var dropped = 0
         for ((path, row) in manifest.entries.toList()) {
             val f = fileFor(path)
@@ -124,8 +147,8 @@ class CachingFetcher(
                 dropped++
             }
         }
-        flush()
-        return dropped
+        flushLocked()
+        dropped
     }
 
     // ── internals ──────────────────────────────────────────────────────────
@@ -134,19 +157,32 @@ class CachingFetcher(
         val f = fileFor(path)
         f.parentFile?.mkdirs()
         f.writeBytes(bytes)
-        manifest[path] = ManifestRow(
-            path = path,
-            bytes = bytes.size.toLong(),
-            fetchedAtMs = System.currentTimeMillis(),
-            sha256 = null, // per-file hashing on every fetch costs more than it returns; MANIFEST.sha256 covers integrity at source
-        )
-        flush()
+        synchronized(lock) {
+            manifest[path] = ManifestRow(
+                path = path,
+                bytes = bytes.size.toLong(),
+                fetchedAtMs = System.currentTimeMillis(),
+                sha256 = null, // per-file hashing on every fetch costs more than it returns; MANIFEST.sha256 covers integrity at source
+            )
+            flushLocked()
+        }
     }
 
-    private fun fileFor(path: String): File {
-        val flat = path.replace('/', '_')
-        return File(cacheDir, if (flat.length > 200) flat.takeLast(200) else flat)
-    }
+    /**
+     * Cache artifact for [path]. A path with no separator keeps its name
+     * (browsable); anything else gets `sha256(path) + "_" + leaf` — the old
+     * flatten-and-truncate collided for distinct long paths.
+     */
+    private fun fileFor(path: String): File =
+        if (path.none { it == '/' || it == '\\' } && path.length <= 200 && path != MANIFEST_NAME) {
+            File(cacheDir, path)
+        } else {
+            File(cacheDir, sha256Hex(path) + "_" + path.substringAfterLast('/').takeLast(60))
+        }
+
+    private fun sha256Hex(s: String): String =
+        MessageDigest.getInstance("SHA-256").digest(s.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
 
     /**
      * Content-tier category: the first two path segments ("assets/adhan",
@@ -163,7 +199,13 @@ class CachingFetcher(
     }
 
     private fun ensureLoaded() {
-        if (loaded.value) return
+        if (loaded) return
+        synchronized(lock) { ensureLoadedLocked() }
+    }
+
+    /** Caller holds [lock]. */
+    private fun ensureLoadedLocked() {
+        if (loaded) return
         if (manifestFile.isFile) {
             runCatching {
                 manifest.clear()
@@ -173,11 +215,18 @@ class CachingFetcher(
                 )
             }
         }
-        loaded.set(true)
+        loaded = true
     }
 
-    private fun flush() {
-        manifestFile.writeText(json.encodeToString(manifest.values.toList()))
+    /** Caller holds [lock]. Temp file + rename: a crash mid-flush keeps the old manifest. */
+    private fun flushLocked() {
+        val tmp = File(cacheDir, "$MANIFEST_NAME.tmp")
+        tmp.writeText(json.encodeToString(manifest.values.toList()))
+        if (!tmp.renameTo(manifestFile)) {
+            // Non-POSIX fallback (rename-onto-existing failed): best-effort replace.
+            manifestFile.delete()
+            check(tmp.renameTo(manifestFile)) { "manifest replace failed: $manifestFile" }
+        }
     }
 
     companion object {
@@ -200,17 +249,10 @@ data class DownloadsSnapshot(
     val bytesByCategory: Map<String, Long>,
 )
 
-    private fun CachingFetcher.ManifestRow.toView(path: String, category: String) = DownloadedItemView(
-        path = path,
-        category = category,
-        bytes = bytes,
-        fetchedAtMs = fetchedAtMs,
-        sha256 = sha256,
-    )
-
-/** Minimal internal boolean cell (avoids kotlin.concurrent lock-free API surface). */
-private class AtomicBool(initial: Boolean) {
-    private var v = initial
-    val value: Boolean get() = synchronized(this) { v }
-    fun set(b: Boolean) { synchronized(this) { v = b } }
-}
+private fun CachingFetcher.ManifestRow.toView(path: String, category: String) = DownloadedItemView(
+    path = path,
+    category = category,
+    bytes = bytes,
+    fetchedAtMs = fetchedAtMs,
+    sha256 = sha256,
+)

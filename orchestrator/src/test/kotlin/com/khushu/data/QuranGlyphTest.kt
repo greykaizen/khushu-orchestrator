@@ -23,8 +23,8 @@ class QuranGlyphTest {
             .firstOrNull { File(it, "inventory/quran_metadata/quran_glyphs.json").exists() }
             // absorbed-test resolver: content corpus lives in the sibling checkout
             ?: generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
-                .firstOrNull { File(it, "khushu-quran-data/inventory/quran_metadata/quran_glyphs.json").exists() }
-                ?.let { File(it, "khushu-quran-data") }
+                .firstOrNull { File(it, "khushu-data-api/inventory/quran_metadata/quran_glyphs.json").exists() }
+                ?.let { File(it, "khushu-data-api") }
             ?: error("repo root not found")
 
     private val source = QuranGlyphSource(LocalFetcher(repoRoot.absolutePath.toPath()))

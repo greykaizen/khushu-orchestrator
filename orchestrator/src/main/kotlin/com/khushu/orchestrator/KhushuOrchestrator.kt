@@ -11,9 +11,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * Host-side per-day settings the orchestrator threads into engine + data-api
@@ -84,8 +84,15 @@ class DayModel internal constructor(
             val w = s.window
             if (w != null) { b.add(w.first); b.add(w.second) }
         }
-        prayerTimes.maghrib.raw?.let { b.add(it) }
-        prayerTimes.isha.raw?.let { b.add(it) }
+        // EVERY prayer entry is a boundary — statusFlow sleeps until the next
+        // one, so omitting any entry makes the countdown go stale for up to
+        // maxWait (v1.4.2 fix: only maghrib/isha were listed).
+        for (t in listOf(
+            prayerTimes.fajr, prayerTimes.sunrise, prayerTimes.dhuhr,
+            prayerTimes.asr, prayerTimes.maghrib, prayerTimes.isha,
+        )) {
+            t.raw?.let { b.add(it) }
+        }
         nextFajr?.let { b.add(it) }
         b.add(key.date.plusDays(1).atStartOfDay(key.zoneId).toInstant())
         boundaries = b.toList()
@@ -117,13 +124,17 @@ class DayModel internal constructor(
 /**
  * LRU over day plans. Capacity 4: yesterday (midnight-window tail), today,
  * tomorrow (warmup), one spare.
+ *
+ * Fully mutex-guarded — peek, get and clear serialize on [mutex]; there is NO
+ * lock-free path (an access-order LinkedHashMap mutates on every read, so an
+ * unsynchronized peek raced with a mid-build get — v1.4.2 fix).
  */
 internal class DayModelCache(private val capacity: Int = 4) {
     private val mutex = Mutex()
     private val map = LinkedHashMap<DayKey, DayModel>(capacity, 0.75f, true)
 
-    /** Non-blocking peek — null when absent (no build). */
-    fun peek(key: DayKey): DayModel? = map[key]
+    /** Non-building lookup — null when absent. Suspend: shares the build mutex. */
+    suspend fun peek(key: DayKey): DayModel? = mutex.withLock { map[key] }
 
     suspend fun get(key: DayKey, build: suspend (DayKey) -> DayModel): DayModel =
         mutex.withLock {
@@ -136,9 +147,14 @@ internal class DayModelCache(private val capacity: Int = 4) {
             model
         }
 
-    fun clear() {
-        // Mutex held for liveness (get() may be mid-build); LinkedHashMap.clear is safe here.
-        map.clear()
+    suspend fun clear() {
+        // v1.4.2: actually under the mutex — the old comment claimed it was.
+        mutex.withLock { map.clear() }
+    }
+
+    /** Drop one day's plan only — forceRecompute no longer nukes the whole LRU. */
+    suspend fun invalidate(key: DayKey) {
+        mutex.withLock { map.remove(key) }
     }
 }
 
@@ -162,7 +178,7 @@ class KhushuOrchestrator(
     internal val engine: KhushuEngine = KhushuEngine(),
     /** Host transport decision (cache dir + fetcher) — the singleton's only construction input. */
     fetcher: ContentFetcher,
-) {
+) : AutoCloseable {
     /** Content retrieval — absorbed from khushu-data-api (v1.4.0); package `com.khushu.data` retained. */
     internal val data: KhushuContent = KhushuContent(fetcher)
     private val cache = DayModelCache()
@@ -182,14 +198,27 @@ class KhushuOrchestrator(
     val sunnah = SunnahNamespace(this)
 
     /**
+     * Release SQLite connections and any closeable data-layer state on process
+     * teardown. The data layer's close runs ON the single SQLite thread — an
+     * in-flight sunnah/FTS query drains before its connection is released
+     * (v1.6.0: this used to race the dispatcher). The instance stays usable
+     * for sunnah queries only after a fresh [SunnahNamespace.attach] — the
+     * DayModel cache rebuilds lazily.
+     */
+    override fun close() {
+        // runBlocking here is teardown-only (process death), never a request
+        // path — the one sanctioned blocking bridge in the artifact.
+        kotlinx.coroutines.runBlocking { withContext(data.sqlDispatcher) { data.close() } }
+    }
+
+    /**
      * Build (or fetch cached) the [DayModel] for [key]. The ONLY place prayer
      * times are computed for the day; adaptive serves read from it.
      */
     suspend fun dayModel(key: DayKey, forceRecompute: Boolean = false): DayModel {
-        if (forceRecompute) cache.clear()
+        if (forceRecompute) cache.invalidate(key)
         return cache.get(key) { build(it) }
     }
-
     /**
      * App-start hook: prebuild the DayModel for [today] (and optionally
      * [tomorrow]'s — the night windows already span into it) and warm the
@@ -209,14 +238,6 @@ class KhushuOrchestrator(
         }
         mushafBundle?.let { bundleSpec -> mushaf.prefetchPages(bundleSpec.first, bundleSpec.second, mushafPages) }
     }
-
-    /**
-     * Blocking day-model access for synchronous namespaces: cache hit = O(1)
-     * return (the steady state after [warmup]); cache miss = one suspending
-     * build bridged with runBlocking — bounded, and only on the cold path.
-     */
-    fun dayModelSync(key: DayKey): DayModel =
-        cache.peek(key) ?: runBlocking { dayModel(key) }
 
     private suspend fun build(key: DayKey): DayModel {
         // Slug-index the corpus once per build: every probe-point evaluation

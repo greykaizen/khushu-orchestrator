@@ -15,6 +15,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 
 /**
@@ -29,9 +33,9 @@ class DayModelTest {
             .firstOrNull { File(it, "assets/dua_dhikr/dua_data.json").exists() }
             // composite-build sibling checkout
             ?: generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
-                .firstOrNull { File(it, "khushu-quran-data/assets/dua_dhikr/dua_data.json").exists() }
-                ?.let { File(it, "khushu-quran-data") }
-            ?: error("khushu-quran-data repo root not found (run with -PlocalFamily against sibling checkout)")
+                .firstOrNull { File(it, "khushu-data-api/assets/dua_dhikr/dua_data.json").exists() }
+                ?.let { File(it, "khushu-data-api") }
+            ?: error("khushu-data-api repo root not found (run with -PlocalFamily against sibling checkout)")
 
     private val london = ZoneId.of("Europe/London")
     private val londonLocation = Location(Latitude(51.5074), Longitude(-0.1278), AltitudeMeters(11.0))
@@ -150,6 +154,43 @@ class DayModelTest {
         val after = model.nextBoundary(next)
         assertNotNull(after)
         assertTrue(after > next)
+    }
+
+    @Test
+    fun boundariesIncludeEveryPrayerEntry() = runTest {
+        // v1.4.2 regression: only maghrib/isha were boundaries, so statusFlow
+        // went stale for up to maxWait after every other prayer entry.
+        val model = orchestrator().dayModel(key())
+        val t = model.prayerTimes
+        val entries = listOf(t.fajr, t.sunrise, t.dhuhr, t.asr, t.maghrib, t.isha)
+            .mapNotNull { it.raw }
+        assertTrue(entries.size >= 5, "London June has computable entries: ${entries.size}")
+        for (e in entries) {
+            assertTrue(model.boundaries.contains(e), "prayer entry $e missing from boundaries")
+        }
+        // walking nextBoundary from day start visits each of them, in order
+        var now = model.key.date.atStartOfDay(model.key.zoneId).toInstant().minusSeconds(1)
+        val visited = generateSequence(model.nextBoundary(now)) { model.nextBoundary(it) }.toList()
+        for (e in entries) assertTrue(e in visited, "boundary walk missed $e")
+    }
+
+    @Test
+    fun dayModelCacheSurvivesConcurrentAccess() = runBlocking {
+        // v1.4.2 regression: unsynchronized peek/clear raced with mid-build get.
+        val o = orchestrator()
+        val k1 = key()
+        val k2 = key(DaySettings(maxSections = 3))
+        coroutineScope {
+            repeat(30) { launch(Dispatchers.Default) { o.dayModel(k1) } }
+            repeat(30) { launch(Dispatchers.Default) { o.dayModel(k2) } }
+            repeat(10) { launch(Dispatchers.Default) { o.dayModel(k1, forceRecompute = true) } }
+        }
+        // Distinct keys must never alias: the cached k1 model carries k1's key
+        // and k1's maxSections, NOT k2's (the v1.4.2 race could cross-wire them).
+        val m1 = o.dayModel(k1)
+        assertEquals(k1, m1.key)
+        assertEquals(2, m1.sections(m1.key.date.atStartOfDay(london).toInstant()).size.coerceAtMost(2))
+        assertEquals(k2, o.dayModel(k2).key)
     }
 
     // ── polar day: anchors degrade to ANYTIME-only ────────────────────────

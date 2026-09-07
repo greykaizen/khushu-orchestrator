@@ -8,12 +8,14 @@
 
 | Item | Value |
 |---|---|
-| Coordinate | `com.github.greykaizen.khushu-orchestrator:orchestrator:vX.Y.Z` |
+| Coordinate | `com.github.greykaizen:khushu-orchestrator:orchestrator-vX.Y.Z` (JitPack root-project coordinate — the git tag is the version; matches the host's `libs.versions.toml`) |
 | Depends on | `khushu-engine:engine-facade` + `khushu-data-api` (both `api` config — signatures expose their types; compile-time pinning IS the compatibility check) |
 | Purity | Pure Kotlin/JVM. No Android, no Compose types, no persistence, no Clock. All time/zone/location are explicit parameters. |
 | License | GPL-3.0 (family standard) |
 
 Hosts add **one** coordinate and receive both libraries transitively.
+
+**Store exception (doctrine amendment, v1.4.2):** the settings store (`com.github.greykaizen.khushu-engine:store`) is the ONE additional coordinate a host may need. Persistence stays OUT of the orchestrator (§1 purity) — the store is a host-side concern that ships in the engine repo for convenience, not a fourth seam. "One coordinate" means one compute+content surface, not one jar total.
 
 ## 2. What the orchestrator IS
 
@@ -30,7 +32,7 @@ Hosts add **one** coordinate and receive both libraries transitively.
 ## 3. What the orchestrator is NOT
 
 - Not a god facade: no generic `execute(recipe)`, no rule systems. Flat namespaces of named composites.
-- Not a cache of last resort: caching semantics per capability use documented keys (engine CachedEngine + data-api CachingFetcher stay authoritative for their own facts); the DayModel caches only composed per-day facts keyed by everything that affects them.
+- Not a cache of last resort: the engine's `CachedEngine` serves **standalone facade consumers**; the data-api `CachingFetcher` owns transport caching; the DayModel caches only composed per-day facts keyed by everything that affects them. The orchestrator deliberately does NOT route through `DayApi`/`CachedEngine` — no double caching by construction.
 - Not a domain owner: no fiqh, no content curation — schools positions are parameters selected by the host, provenance documented in the libraries that own them.
 - Not a data store: the content corpus (inventory/, assets/) lives in the content checkout — this repo serves it over the injected ContentFetcher; corpora are never committed here.
 

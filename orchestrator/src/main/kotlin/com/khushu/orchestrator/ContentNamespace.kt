@@ -18,9 +18,11 @@ import com.khushu.data.model.DuaCategory
  * through this surface carry no recomputation risk.
  *
  * This surface mirrors the full retrieval capability of KhushuContent so the
- * wall never blocks a host feature: quran (text/pages/atlases), mushaf
- * addressing, recitations, adhan, dua/asma, sunnah books, islamic events,
- * catalogs, topics, similar-verse, wbw, chapter info.
+ * wall never blocks a host feature: quran (text/pages/atlases/search/mutashabihat),
+ * mushaf addressing, recitations, adhan, dua/asma, sunnah books, islamic events,
+ * catalogs (+ sync tracking), topics, similar-verse, wbw, chapter info.
+ * (v1.6.0 closed the last gaps: quran FTS search, ayah words, mushafScript,
+ * mutashabihat occurrences, topic relations, adhan.standard, catalog tracking.)
  */
 class ContentNamespace internal constructor(private val o: KhushuOrchestrator) {
 
@@ -68,6 +70,24 @@ class ContentNamespace internal constructor(private val o: KhushuOrchestrator) {
     suspend fun searchAliases(surahNo: Int, langCode: String? = null) =
         o.data.quran.searchAliases(surahNo, langCode)
 
+    /** Word-level ayah data (`kind` flags ayah-end marker glyphs). */
+    suspend fun ayahWords(surahNo: Int, script: String = "uthmani", includeAyahMarker: Boolean = true) =
+        o.data.quran.words(surahNo, script, includeAyahMarker)
+
+    /**
+     * Arabic full-text Quran search (FTS5, diacritic-stripped). Index builds
+     * on first call on the single SQLite thread; pass [indexDb] on the FIRST
+     * call to persist it across runs. Was unexposed pre-v1.6.0 — the wall
+     * blocked Quran search while SunnahNamespace served hadith search.
+     */
+    suspend fun quranSearch(
+        query: String,
+        limit: Int = 20,
+        offset: Int = 0,
+        indexDb: java.io.File? = null,
+    ): List<com.khushu.data.model.QuranSearchHit> =
+        o.data.quran.search(query, limit, offset, indexDb)
+
     /** Rendering-script registry (ayah_words coverage). */
     suspend fun scripts() = o.data.quran.scripts()
 
@@ -76,6 +96,9 @@ class ContentNamespace internal constructor(private val o: KhushuOrchestrator) {
 
     /** Canonical word registry for a script — 1-based running word ids. */
     suspend fun wordRegistry(script: String) = o.data.quran.wordRegistry(script)
+
+    /** Rendering script for a mushaf code (delegates; no corpus read). */
+    fun mushafScript(mushafCode: String): String = o.data.quran.mushafScript(mushafCode)
 
     // ── quran — mushaf page addressing ─────────────────────────────────────
 
@@ -132,10 +155,14 @@ class ContentNamespace internal constructor(private val o: KhushuOrchestrator) {
 
     suspend fun similarTo(ayahId: Int) = o.data.quran.similarTo(ayahId)
     suspend fun mutashabihatPhrases() = o.data.quran.mutashabihatPhrases()
+    suspend fun mutashabihatOccurrences(phraseId: Int) =
+        o.data.quran.mutashabihatOccurrences(phraseId)
     suspend fun topics(type: String? = null) = o.data.quran.topics(type)
     suspend fun topic(id: Int) = o.data.quran.topic(id)
     suspend fun topicBySlug(slug: String) = o.data.quran.topicBySlug(slug)
     suspend fun topicsForAyah(ayahId: Int) = o.data.quran.topicsForAyah(ayahId)
+    suspend fun topicRelations(topicId: Int, type: String? = null) =
+        o.data.quran.topicRelations(topicId, type)
 
     // ── recitations ────────────────────────────────────────────────────────
 
@@ -162,6 +189,9 @@ class ContentNamespace internal constructor(private val o: KhushuOrchestrator) {
     /** Adhan audio bytes (donor-collected recordings). */
     suspend fun adhanAudio(id: String): ByteArray? = o.data.adhan.audio(id)
 
+    /** Standard-style entries only (excludes Fajr-only / Eid-Takbir variants). */
+    suspend fun adhanStandard() = o.data.adhan.standard()
+
     // ── catalogs (discovery manifests) ─────────────────────────────────────
 
     suspend fun catalogTranslations() = o.data.catalogs.translations()
@@ -169,6 +199,16 @@ class ContentNamespace internal constructor(private val o: KhushuOrchestrator) {
     suspend fun catalogWbw(v2: Boolean = false) = o.data.catalogs.wbw(v2)
     suspend fun catalogFonts() = o.data.catalogs.fonts()
     suspend fun catalogWebLinks() = o.data.catalogs.webLinks()
+
+    // ── catalog sync tracking (download-state bookkeeping) ─────────────────
+
+    /** Which [catalogTranslations] entries are stale vs the installed versions. */
+    fun catalogPendingUpdates(entries: List<com.khushu.data.model.CatalogEntry>): List<com.khushu.data.model.DownloadState> =
+        o.data.catalogs.pendingUpdates(entries)
+
+    /** Record that pack [packId] at [version] is now installed (after orch.downloads completes it). */
+    fun catalogMarkDownloaded(packId: String, version: Long) =
+        o.data.catalogs.markDownloaded(packId, version)
 
     // ── curated ────────────────────────────────────────────────────────────
 

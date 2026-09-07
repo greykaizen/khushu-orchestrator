@@ -36,7 +36,11 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
         val normalizedIndex: Map<String, String>,
         val registry: List<com.khushu.data.model.RegistryWord>,
         val unitsPerEm: Int,
-    )
+    ) {
+        /** Registry grouped by ayahId (surah*1000 + ayah) — built once; the old
+         *  renderableAyah linear-scanned all ~77k words per ayah (v1.6.0). */
+        val wordsByAyah: Map<Int, List<com.khushu.data.model.RegistryWord>> = registry.groupBy { it.ayahId }
+    }
 
     private fun placementsFor(a: BundleAssets, text: String): List<com.khushu.data.atlas.AtlasGlyphPlacement> =
         a.placementsByWord[text]
@@ -146,7 +150,7 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
     ): AyahGlyphLayout {
         val a = bundleAssets(bundleId, sizeLabel)
         val ayahId = surahNo * 1000 + ayahNo
-        val words = a.registry.filter { it.ayahId == ayahId }
+        val words = a.wordsByAyah[ayahId].orEmpty()
         var widthFu = 0.0
         var unresolvedWords = 0
         val positioned = words.mapIndexed { idx, w ->

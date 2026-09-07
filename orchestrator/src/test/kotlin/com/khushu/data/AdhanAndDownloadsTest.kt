@@ -2,15 +2,34 @@ package com.khushu.data
 
 import com.khushu.data.adhan.AdhanSource
 import com.khushu.data.transport.CachingFetcher
+import com.khushu.data.transport.ContentFetcher
 import com.khushu.data.transport.LocalFetcher
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import okio.Path.Companion.toPath
+
+/** Counts body fetches; existence probes delegate to the wrapped fetcher. */
+private class CountingFetcher(private val delegate: ContentFetcher) : ContentFetcher {
+    val fetches = AtomicInteger()
+    val opusFetches = AtomicInteger()
+    override suspend fun fetch(path: String): ByteArray {
+        fetches.incrementAndGet()
+        if (path.endsWith(".opus")) opusFetches.incrementAndGet()
+        return delegate.fetch(path)
+    }
+    override suspend fun exists(path: String): Boolean = delegate.exists(path)
+}
 
 /**
  * Adhan catalog + download tracking + dua audio + grouped bundle — anchored
@@ -23,8 +42,8 @@ class AdhanAndDownloadsTest {
             .firstOrNull { File(it, "assets/adhan").exists() }
             // absorbed-test resolver: content corpus lives in the sibling checkout
             ?: generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
-                .firstOrNull { File(it, "khushu-quran-data/assets/adhan").exists() }
-                ?.let { File(it, "khushu-quran-data") }
+                .firstOrNull { File(it, "khushu-data-api/assets/adhan").exists() }
+                ?.let { File(it, "khushu-data-api") }
             ?: error("repo root not found")
 
     private val fetcher = LocalFetcher(repoRoot.absolutePath.toPath())
@@ -143,6 +162,47 @@ class AdhanAndDownloadsTest {
         assertTrue(bytes.size > 10_000)
         // invalid id → null (dua lookup fails first)
         assertNull(content.dua.localAudioPath(9999))
+    }
+
+    @Test
+    fun localAudioPathProbesWithoutBodyDownloads() = runTest {
+        // v1.4.2 regression: existence was probed by downloading the whole opus,
+        // then audio(id) downloaded it again — 2× network per dua.
+        val counting = CountingFetcher(fetcher)
+        val content = com.khushu.data.repo.KhushuContent(counting)
+
+        assertNull(content.dua.localAudioPath(293), "id 293: url but no local mirror → null")
+        assertEquals(0, counting.opusFetches.get(), "existence probe must not download opus bodies")
+
+        assertNotNull(content.dua.localAudioPath(1))
+        assertEquals(0, counting.opusFetches.get(), "LocalFetcher.exists is a file check — no body")
+
+        val first = content.dua.audio(1)!!
+        assertEquals(1, counting.opusFetches.get(), "audio(id) fetches exactly once")
+        assertEquals(first.size, content.dua.audio(1)!!.size)
+        assertEquals(1, counting.opusFetches.get(), "second audio(id) is memoized")
+    }
+
+    // ── caching fetcher concurrency (v1.4.2) ──────────────────────────────
+
+    @Test
+    fun cachingFetcherSurvivesConcurrentFetches() = runBlocking {
+        val dir = File(System.getProperty("java.io.tmpdir"), "khushu-test-conc-${System.nanoTime()}")
+        val caching = CachingFetcher(dir, fetcher)
+        val paths = (1..30).map { "assets/dua_dhikr/dua_${it}.opus" }
+        coroutineScope {
+            paths.map { p ->
+                launch(Dispatchers.Default) {
+                    repeat(3) { caching.fetch(p) } // duplicate concurrent fetches
+                }
+            }.joinAll()
+        }
+        // manifest parses, rows == distinct paths, no tmp left behind
+        val snap = caching.downloads()
+        assertEquals(paths.toSet().size, snap.items.size)
+        assertTrue(dir.resolve(CachingFetcher.MANIFEST_NAME).isFile)
+        assertTrue(dir.listFiles { f -> f.name.endsWith(".tmp") }.isNullOrEmpty())
+        dir.deleteRecursively()
     }
 
     // ── islamic events display data ───────────────────────────────────────

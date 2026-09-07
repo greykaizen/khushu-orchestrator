@@ -31,12 +31,16 @@ import com.khushu.data.transport.DownloadsSnapshot
 import com.khushu.data.plans.CollectionPlan
 import com.khushu.data.plans.PlanFactory
 import com.khushu.data.plans.DownloadsLedger
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -124,12 +128,22 @@ import java.io.File
  * All Quran-side calls work through the injected [ContentFetcher] — a remote
  * GitHub-raw transport for streaming mode, or [com.khushu.data.transport.LocalFetcher]
  * against a checkout for offline mode.
+ *
+ * SQLITE CONFINEMENT (v1.6.0): every SQLite touch in this instance — the
+ * sunnah corpora, their FTS side index, and the quran FTS index — runs on
+ * [sqlDispatcher] (single-threaded). JDBC `Connection`s are not thread-safe
+ * and are shared per repository; one executor serializes them all. [close]
+ * also runs on it, so an in-flight query can never race the teardown.
  */
 class KhushuContent(
     fetcher: ContentFetcher,
 ) : AutoCloseable {
 
-    val quran: QuranApi = QuranApi(fetcher)
+    /** The one thread every SQLite statement in this instance runs on. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    internal val sqlDispatcher: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(1)
+
+    val quran: QuranApi = QuranApi(fetcher, sqlDispatcher)
     val catalogs: CatalogApi = CatalogApi(fetcher)
     val curated: CuratedApi = CuratedApi(fetcher)
     val dua: DuaApi = DuaApi(fetcher)
@@ -185,7 +199,11 @@ class KhushuContent(
 }
 
 /** Quran surface: text, words, translations, metadata, navigation, layout, search, insight. */
-class QuranApi internal constructor(private val fetcher: ContentFetcher) : AutoCloseable {
+class QuranApi internal constructor(
+    private val fetcher: ContentFetcher,
+    /** Single SQLite thread shared with the sunnah layer — see [KhushuContent]. */
+    private val sqlDispatcher: CoroutineDispatcher,
+) : AutoCloseable {
 
     private val scriptSource = QuranScriptSource(fetcher)
     private val metadata = QuranMetadataSource(fetcher)
@@ -198,7 +216,28 @@ class QuranApi internal constructor(private val fetcher: ContentFetcher) : AutoC
     private val wbw = WbwSource(fetcher)
     private val tafsir = TafsirSource(fetcher)
     private val recitations = RecitationSource(fetcher)
+
+    /**
+     * Quran FTS index — CREATED ON [sqlDispatcher] (the single SQLite thread)
+     * at first [searchQuran] call: one instance, no lazy-init race (v1.6.0:
+     * the old `?: create` could leak a second connection under concurrency).
+     * The first call wins on [indexDb]; pass it on the FIRST search (host app
+     * start) to persist the index across runs — later calls reuse whatever
+     * exists (null → in-memory, rebuilt per process, ~1 s).
+     */
+    @Volatile
     private var searchIndex: QuranSearchIndex? = null
+
+    internal suspend fun searchQuran(
+        query: String,
+        limit: Int = 20,
+        offset: Int = 0,
+        indexDb: File? = null,
+    ): List<com.khushu.data.model.QuranSearchHit> = withContext(sqlDispatcher) {
+        val idx = searchIndex ?: QuranSearchIndex(fetcher, indexDb = indexDb)
+            .also { searchIndex = it }
+        idx.search(query, limit, offset)
+    }
 
     /** Mushaf glyph-atlas bundles feeding khushu-engine `engine-mushaf`. */
     val atlas = QuranAtlasApi(fetcher)
@@ -389,12 +428,15 @@ class QuranApi internal constructor(private val fetcher: ContentFetcher) : AutoC
 
     /**
      * Arabic full-text search (FTS5 over the normalized text export). The
-     * index is built on first use; pass [indexDb] to persist it across runs.
+     * index is built single-threaded on [sqlDispatcher] at first call — see
+     * [com.khushu.data.repo.searchQuran]'s contract for [indexDb] persistence.
      */
-    fun search(indexDb: File? = null): QuranSearchIndex =
-        searchIndex ?: QuranSearchIndex(fetcher, indexDb = indexDb).also { searchIndex = it }
+    suspend fun search(query: String, limit: Int = 20, offset: Int = 0, indexDb: File? = null): List<com.khushu.data.model.QuranSearchHit> =
+        searchQuran(query, limit, offset, indexDb)
 
     override fun close() {
+        // NOTE: only reached via KhushuContent.close(), which the orchestrator
+        // runs on [sqlDispatcher] — never race an in-flight statement (v1.6.0).
         searchIndex?.close()
         searchIndex = null
         scriptSource.clearCache()
@@ -680,17 +722,21 @@ class DownloadsApi internal constructor(private val fetcher: ContentFetcher) {
         val caching = caching
             ?: error("DownloadsApi.download requires a CachingFetcher (host injected a non-tracking transport)")
         val ledger = ledgerOrNull()
+        check(plan.paths.isNotEmpty()) { "download: plan ${plan.id} has no paths (empty ledger?)" }
         var done = 0
         val doneLock = kotlinx.coroutines.sync.Mutex()
         val failures = mutableListOf<Pair<String, String>>()
         val fetchedBytes = AtomicLong()
         val sem = Semaphore(4)
+        // v1.4.2: hoisted — the old per-path cachingPathSet rebuilt + re-sorted
+        // the ENTIRE manifest for every file (O(N²) over the plan).
+        val presentBefore = cachingPathSet(caching)
         kotlinx.coroutines.coroutineScope {
             plan.paths.map { path ->
                 async {
                     sem.withPermit {
                         try {
-                            val before = path in cachingPathSet(caching)
+                            val before = path in presentBefore
                             val bytes = caching.fetch(path)
                             if (!before) fetchedBytes.addAndGet(bytes.size.toLong())
                             if (shaVerify) {
@@ -704,7 +750,11 @@ class DownloadsApi internal constructor(private val fetcher: ContentFetcher) {
                                 }
                             }
                         } catch (e: Exception) {
-                            failures += path to (e.message ?: e::class.simpleName ?: "error")
+                            // v1.4.2: failures mutated from 4 concurrent workers —
+                            // serialized under the same lock as the done counter.
+                            doneLock.withLock {
+                                failures += path to (e.message ?: e::class.simpleName ?: "error")
+                            }
                         }
                         val d = doneLock.withLock { ++done }
                         onProgress(d, plan.paths.size)
