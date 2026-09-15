@@ -1,29 +1,47 @@
 package com.khushu.data.store
 
 /**
- * A single read-only result row, addressed by column label or position.
- * Transport-neutral so identical domain code runs against a local SQLite pack
- * ([JdbcSqlStore]) or a remote Turso query ([HttpSqlStore]) without either
- * leaking a driver/HTTP type upward.
+ * A single read-only result row, addressable **by column label or by position**.
+ * Label access is the ergonomic path; positional access is mandatory because the
+ * Android local engine (libSQL `tech.turso.libsql:libsql`) returns rows as bare
+ * `List<Any?>` without column metadata — so every store must supply both.
+ *
+ * Transport-neutral by contract: identical domain code runs against a local
+ * SQLite pack ([JdbcSqlStore] on JVM / `LibsqlSqlStore` on Android) or a remote
+ * Turso query ([HttpSqlStore]) without leaking a driver/HTTP type upward.
  */
 interface Row {
+    /** Column labels in result order; may be empty when the engine doesn't expose names. */
     val columns: List<String>
-    fun isNull(column: String): Boolean
-    fun string(column: String): String?
-    fun int(column: String): Int?
-    fun long(column: String): Long?
-    fun double(column: String): Double?
 
-    /** Generic accessor over the first column (label unknown to callers of [SqlStore.scalar]). */
-    fun any(column: String = columns.firstOrNull().orEmpty()): Any?
+    // ── positional (always supported; `index` is 0-based) ────────────────────────
+    fun isNullAt(index: Int): Boolean
+    fun stringAt(index: Int): String?
+    fun intAt(index: Int): Int?
+    fun longAt(index: Int): Long?
+    fun doubleAt(index: Int): Double?
+    fun anyAt(index: Int): Any?
+
+    // ── by label (convenience; default impls resolve via [columns]) ─────────────
+    fun indexOf(column: String): Int = columns.indexOf(column)
+    fun isNull(column: String): Boolean = isNullAt(indexOf(column))
+    fun string(column: String): String? = stringAt(indexOf(column))
+    fun int(column: String): Int? = intAt(indexOf(column))
+    fun long(column: String): Long? = longAt(indexOf(column))
+    fun double(column: String): Double? = doubleAt(indexOf(column))
+
+    /** First-column value, when the caller doesn't care about the label (COUNT, MAX, …). */
+    fun any(column: String = columns.firstOrNull().orEmpty()): Any? = anyAt(indexOf(column))
 }
 
 /**
  * Query-level SQL abstraction over ONE logical database — a downloaded pack
  * fragment (offline) or a Turso database (online). Deliberately NOT a
- * `java.sql.Connection`: the orchestrator is JVM-only and bundles a desktop
- * sqlite-jdbc native that cannot load on Android, so hosts inject the engine
- * (Android `androidx.sqlite`, or HTTP to Turso) through this seam.
+ * `java.sql.Connection`: the orchestrator is JVM-only, and on Android neither
+ * `sqlite-jdbc` (desktop native) nor `androidx.sqlite` (framework SQLite — has
+ * **NO** FTS5, validated on API-37) can read our FTS5-bearing packs. Hosts
+ * inject the engine (Android: libSQL bundled native; JVM/tests: sqlite-jdbc;
+ * remote: HTTP `/v2/pipeline`) through this seam.
  *
  * Read-only by contract — canonical content is admin-updated, never written by
  * the client (there is NO sync). Implementations run the SAME SQL against the
@@ -38,7 +56,7 @@ interface SqlStore : AutoCloseable {
 
     /** First column of the first row, or null — the common COUNT / single-value read. */
     suspend fun scalar(sql: String, args: List<Any?> = emptyList()): Any? =
-        queryOne(sql, args)?.any()
+        queryOne(sql, args)?.anyAt(0)
 
     override fun close() {}
 }

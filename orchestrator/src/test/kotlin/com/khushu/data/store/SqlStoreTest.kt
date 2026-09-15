@@ -90,4 +90,29 @@ class SqlStoreTest {
         val e = assertFailsWith<TursoQueryException> { store.query("CREATE TABLE _x(y INT)") }
         assertTrue("SQL write operations are forbidden" in (e.message ?: ""), e.message ?: "")
     }
+
+    /**
+     * Positional access is the mandatory path (Android libSQL `Rows` yields `List<Any?>`
+     * without labels); label access is the ergonomic default derived from [Row.columns].
+     * Both must agree for every store implementation.
+     */
+    @Test fun rowsExposePositionalAndLabelledAccessConsistently() = runTest {
+        // JDBC (has labels; positional must agree)
+        JdbcSqlStore(File(packsRoot, "content.db")).use { s ->
+            val r = s.queryOne("SELECT id, name FROM names_names WHERE id=(SELECT MIN(id) FROM names_names)")!!
+            assertEquals(1L, r.longAt(0)); assertEquals(1L, r.long("id"))
+            assertNotNull(r.stringAt(1)); assertEquals(r.stringAt(1), r.string("name"))
+            assertEquals(2, r.columns.size)
+        }
+        // HTTP (labels present here too — but verify the positional contract is exposed)
+        val canned = """
+        {"results":[{"type":"ok","response":{"type":"batch","result":{"step_results":[
+        {"cols":[{"name":"a"},{"name":"b"}],"rows":[[{"type":"integer","value":"7"},{"type":"text","value":"seven"}]]}],"step_errors":[null]}}}]}
+        """
+        HttpSqlStore("https://x.example") { _, _ -> canned }.query("SELECT a,b FROM t").single().let { r ->
+            assertEquals(7L, r.longAt(0)); assertEquals("seven", r.stringAt(1))
+            assertEquals(7L, r.long("a")); assertEquals("seven", r.string("b"))
+            assertEquals(false, r.isNullAt(0)); assertEquals(true, r.isNullAt(9))
+        }
+    }
 }

@@ -59,13 +59,17 @@ class JdbcSqlStore(private val dbFile: File) : SqlStore {
     }
 }
 
-/** Row backed by materialised column→value pairs (cursor-independent). */
+/** Row backed by materialised column→value pairs (cursor-independent, ordered). */
 internal class JdbcRow(override val columns: List<String>, private val v: Map<String, Any?>) : Row {
-    private fun num(column: String): Number? = v[column] as? Number
-    override fun isNull(column: String) = v[column] == null
-    override fun string(column: String): String? = v[column]?.toString()
-    override fun int(column: String): Int? = num(column)?.toInt() ?: v[column]?.toString()?.toIntOrNull()
-    override fun long(column: String): Long? = num(column)?.toLong() ?: v[column]?.toString()?.toLongOrNull()
-    override fun double(column: String): Double? = num(column)?.toDouble() ?: v[column]?.toString()?.toDoubleOrNull()
-    override fun any(column: String): Any? = v[column]
+    // Positional: values map keyed by column name → look up by name at index.
+    private fun at(index: Int): Any? {
+        val name = columns.getOrNull(index) ?: return null
+        return v[name]
+    }
+    override fun isNullAt(index: Int) = at(index) == null
+    override fun stringAt(index: Int): String? = at(index)?.toString()
+    override fun intAt(index: Int): Int? = (at(index) as? Number)?.toInt() ?: at(index)?.toString()?.toIntOrNull()
+    override fun longAt(index: Int): Long? = (at(index) as? Number)?.toLong() ?: at(index)?.toString()?.toLongOrNull()
+    override fun doubleAt(index: Int): Double? = (at(index) as? Number)?.toDouble() ?: at(index)?.toString()?.toDoubleOrNull()
+    override fun anyAt(index: Int): Any? = at(index)
 }
