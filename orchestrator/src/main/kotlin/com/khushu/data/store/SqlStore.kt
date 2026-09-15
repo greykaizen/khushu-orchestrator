@@ -21,6 +21,12 @@ interface Row {
     fun longAt(index: Int): Long?
     fun doubleAt(index: Int): Double?
     fun anyAt(index: Int): Any?
+    /** BLOB value (e.g. gzipped recitation timings) as bytes; engines return byte[] or a Blob. */
+    fun bytesAt(index: Int): ByteArray? = when (val v = anyAt(index)) {
+        is ByteArray -> v
+        is java.sql.Blob -> try { v.getBytes(1, v.length().toInt()) } catch (e: Exception) { null }
+        else -> null
+    }
 
     // ── by label (convenience; default impls resolve via [columns]) ─────────────
     fun indexOf(column: String): Int = columns.indexOf(column)
