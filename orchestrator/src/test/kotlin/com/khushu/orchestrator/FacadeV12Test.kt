@@ -33,8 +33,8 @@ class FacadeV12Test {
         generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
             .firstOrNull { File(it, "assets/dua_dhikr/dua_data.json").exists() }
             ?: generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
-                .firstOrNull { File(it, "khushu-data-api/assets/dua_dhikr/dua_data.json").exists() }
-                ?.let { File(it, "khushu-data-api") }
+                .firstOrNull { File(it, "khushu-data-api/archive/assets/dua_dhikr/dua_data.json").exists() }
+                ?.let { File(it, "khushu-data-api/archive") }
             ?: error("khushu-data-api repo root not found")
 
     private val london = ZoneId.of("Europe/London")

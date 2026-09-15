@@ -20,8 +20,8 @@ class AtlasSliceTest {
             .firstOrNull { File(it, "inventory/atlas").exists() }
             // absorbed-test resolver: content corpus lives in the sibling checkout
             ?: generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
-                .firstOrNull { File(it, "khushu-data-api/inventory/atlas").exists() }
-                ?.let { File(it, "khushu-data-api") },
+                .firstOrNull { File(it, "khushu-data-api/archive/inventory/atlas").exists() }
+                ?.let { File(it, "khushu-data-api/archive") },
     ) { "repository root with inventory/atlas not found" }
 
     private val fetcher = LocalFetcher(repoRoot.absolutePath.toPath())

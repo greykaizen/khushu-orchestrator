@@ -27,8 +27,8 @@ class QuranSliceTest {
             .firstOrNull { File(it, "inventory/quran_scripts").exists() }
             // absorbed-test resolver: content corpus lives in the sibling checkout
             ?: generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
-                .firstOrNull { File(it, "khushu-data-api/inventory/quran_scripts").exists() }
-                ?.let { File(it, "khushu-data-api") }
+                .firstOrNull { File(it, "khushu-data-api/archive/inventory/quran_scripts").exists() }
+                ?.let { File(it, "khushu-data-api/archive") }
             ?: error("repo root not found")
 
     private val fetcher = LocalFetcher(repoRoot.absolutePath.toPath())
