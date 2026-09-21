@@ -177,11 +177,12 @@ class KhushuOrchestrator(
     // [downloads] delegation surfaces — direct engine/data calls (and their
     // recomputation costs) are uncompilable + wrong-by-construction from host code.
     internal val engine: KhushuEngine = KhushuEngine(),
-    /** Host transport decision (cache dir + fetcher) — the singleton's only construction input. */
-    fetcher: ContentFetcher,
+    /** Host transport decision (cache dir + fetcher) — null since v1.7.6 for
+     *  fully pack/Turso-backed hosts; JSON-only domains then fail fast on use. */
+    fetcher: ContentFetcher?,
     /**
      * Host-provided SQL resolver (local pack / Turso). Domains covered by a
-     * resolved store serve SQL-backed reads (DayModel dua corpus first);
+     * resolved store serve SQL-backed reads (dua corpus, islamic events);
      * null → the legacy JSON path. See [com.khushu.data.store.SqlStoreResolver].
      */
     resolver: SqlStoreResolver? = null,

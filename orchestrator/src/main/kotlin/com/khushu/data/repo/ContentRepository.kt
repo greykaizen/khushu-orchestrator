@@ -24,6 +24,7 @@ import com.khushu.data.dua.DuaSource
 import com.khushu.data.dua.AsmaSource
 import com.khushu.data.dua.SqlDuaSource
 import com.khushu.data.store.AssetResolver
+import com.khushu.data.store.SqlEventsSource
 import com.khushu.data.store.SqlStoreResolver
 import com.khushu.data.sunnah.SunnahBookSource
 import com.khushu.data.model.AdhanEntry
@@ -139,7 +140,12 @@ import java.io.File
  * also runs on it, so an in-flight query can never race the teardown.
  */
 class KhushuContent(
-    fetcher: ContentFetcher,
+    /**
+     * Legacy JSON transport. Optional since v1.7.6: hosts going fully
+     * pack/Turso-backed pass null — every domain must then be served by the
+     * [resolver] or it throws. Non-null keeps the JSON fallback per domain.
+     */
+    fetcher: ContentFetcher?,
     /**
      * Host-provided SQL resolver (pack / Turso). When it yields a store for a
      * domain, that domain's Api serves SQL-backed reads and never touches the
@@ -150,26 +156,37 @@ class KhushuContent(
     private val resolver: SqlStoreResolver? = null,
 ) : AutoCloseable {
 
+    /** True when a JSON fallback exists for domains the resolver doesn't cover. */
+    internal val hasJson: Boolean = fetcher != null
+
+    /** Stand-in transport for JSON-less construction: every JSON-only call fails
+     *  fast with a clear message instead of a null-dereference deep in a source. */
+    private val jsonLessFetcher = ContentFetcher { path ->
+        throw IllegalStateException(
+            "No ContentFetcher configured: '$path' is JSON-only. Provide a resolver store for this domain or pass a fetcher."
+        )
+    }
+
     /** The one thread every SQLite statement in this instance runs on. */
     @OptIn(ExperimentalCoroutinesApi::class)
     internal val sqlDispatcher: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(1)
 
-    val quran: QuranApi = QuranApi(fetcher, sqlDispatcher)
-    val catalogs: CatalogApi = CatalogApi(fetcher)
-    val curated: CuratedApi = CuratedApi(fetcher)
-    val dua: DuaApi = DuaApi(fetcher, resolver)
-    val adhan: AdhanApi = AdhanApi(fetcher)
-    val islamicEvents: IslamicEventsApi = IslamicEventsApi(fetcher)
+    val quran: QuranApi = QuranApi(fetcher ?: jsonLessFetcher, sqlDispatcher)
+    val catalogs: CatalogApi = CatalogApi(fetcher ?: jsonLessFetcher)
+    val curated: CuratedApi = CuratedApi(fetcher ?: jsonLessFetcher)
+    val dua: DuaApi = DuaApi(fetcher ?: jsonLessFetcher, resolver)
+    val adhan: AdhanApi = AdhanApi(fetcher ?: jsonLessFetcher)
+    val islamicEvents: IslamicEventsApi = IslamicEventsApi(fetcher, resolver)
 
     /** Download/space management — available only when the injected fetcher
      *  is (or wraps) a [com.khushu.data.transport.CachingFetcher]. */
-    val downloads: DownloadsApi = DownloadsApi(fetcher)
+    val downloads: DownloadsApi = DownloadsApi(fetcher ?: jsonLessFetcher)
 
     /** Per-book sunnah reading — ONLINE path over the sliced corpus
      *  (inventory/hadiths/{c}/books/{lang}/{c}_bNN.json), cached by the
      *  transport when it caches; works WITHOUT [attachSunnah]. The local .db
      *  surface ([attachSunnah]) remains the search-heavy offline path. */
-    val sunnahBooks: SunnahBookSource = SunnahBookSource(fetcher)
+    val sunnahBooks: SunnahBookSource = SunnahBookSource(fetcher ?: jsonLessFetcher)
 
     private var sunnahRepo: LocalHadithRepository? = null
     private var sunnahSearch: HadithSearchRepository? = null
@@ -850,14 +867,26 @@ data class CollectionProgress(
  * canonical in the engine (`calendar.events`); this is the localization/
  * provenance companion the engine's computed events don't carry.
  */
-class IslamicEventsApi internal constructor(private val fetcher: ContentFetcher) {
+class IslamicEventsApi internal constructor(
+    fetcher: ContentFetcher?,
+    /** Resolver for the `content` pack; when it yields a store, events serve SQL. */
+    private val resolver: SqlStoreResolver? = null,
+) {
     private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
     private var cache: List<IslamicEventEntry>? = null
+    /** SQL-backed source when the host resolves `content`; else null → JSON. */
+    private val sqlSource: SqlEventsSource? =
+        kotlinx.coroutines.runBlocking { resolver?.resolve("content") }?.let { SqlEventsSource(it) }
+    private val jsonFetcher: ContentFetcher? = fetcher
 
     /** All event entries (title/category/hijri anchors/source/confidence). */
-    suspend fun all(): List<IslamicEventEntry> = cache ?: run {
+    suspend fun all(): List<IslamicEventEntry> =
+        sqlSource?.all() ?: jsonAll()
+
+    private suspend fun jsonAll(): List<IslamicEventEntry> = cache ?: run {
         val root = json.parseToJsonElement(
-            fetcher.fetch("assets/islamic_calendar/islamic_events.json").decodeToString(),
+            (jsonFetcher ?: error("IslamicEvents: no SQL store resolved and no ContentFetcher configured"))
+                .fetch("assets/islamic_calendar/islamic_events.json").decodeToString(),
         ).jsonObject
         val out = root["events"]!!.jsonArray.map { el ->
             val o = el.jsonObject
