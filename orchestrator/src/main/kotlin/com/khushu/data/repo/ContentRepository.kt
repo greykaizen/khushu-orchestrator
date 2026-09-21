@@ -22,6 +22,9 @@ import com.khushu.data.model.AyahWord
 import com.khushu.data.model.Book
 import com.khushu.data.dua.DuaSource
 import com.khushu.data.dua.AsmaSource
+import com.khushu.data.dua.SqlDuaSource
+import com.khushu.data.store.AssetResolver
+import com.khushu.data.store.SqlStoreResolver
 import com.khushu.data.sunnah.SunnahBookSource
 import com.khushu.data.model.AdhanEntry
 import com.khushu.data.model.AdhanReciter
@@ -137,6 +140,14 @@ import java.io.File
  */
 class KhushuContent(
     fetcher: ContentFetcher,
+    /**
+     * Host-provided SQL resolver (pack / Turso). When it yields a store for a
+     * domain, that domain's Api serves SQL-backed reads and never touches the
+     * JSON transport; null keeps the legacy JSON path. Resolver calls happen
+     * per request — a pack installed (or deleted) later flips that domain
+     * without a restart.
+     */
+    private val resolver: SqlStoreResolver? = null,
 ) : AutoCloseable {
 
     /** The one thread every SQLite statement in this instance runs on. */
@@ -146,7 +157,7 @@ class KhushuContent(
     val quran: QuranApi = QuranApi(fetcher, sqlDispatcher)
     val catalogs: CatalogApi = CatalogApi(fetcher)
     val curated: CuratedApi = CuratedApi(fetcher)
-    val dua: DuaApi = DuaApi(fetcher)
+    val dua: DuaApi = DuaApi(fetcher, resolver)
     val adhan: AdhanApi = AdhanApi(fetcher)
     val islamicEvents: IslamicEventsApi = IslamicEventsApi(fetcher)
 
@@ -502,24 +513,31 @@ class CatalogApi internal constructor(fetcher: ContentFetcher) {
  * contract). Local recitation audio mirrors ship as
  * `assets/dua_dhikr/dua_{id}.opus`.
  */
-class DuaApi internal constructor(fetcher: ContentFetcher) {
+class DuaApi internal constructor(fetcher: ContentFetcher, resolver: SqlStoreResolver? = null) {
 
-    private val duas = DuaSource(fetcher)
+    /** Host resolver for the `content` pack; null → legacy JSON path. */
+    private val resolver = resolver
+    private val json = DuaSource(fetcher)
     private val asma = AsmaSource(fetcher)
+
+    /** The SQL source for a request, when the host resolves a `content` store; per-call so a
+     *  pack installed/deleted later flips this domain without a restart. Returns null → JSON. */
+    private suspend fun sql(): SqlDuaSource? =
+        resolver?.resolve("content")?.let { SqlDuaSource(it, AssetResolver()) }
 
     // ── duas & dhikr ──────────────────────────────────────────────────────
 
     /** All 491 duas (arabic + translation + transliteration + virtue + audio). */
-    suspend fun duas(): List<Dua> = duas.duas()
+    suspend fun duas(): List<Dua> = sql()?.duas() ?: json.duas()
 
     /** One dua by id (1..491). */
-    suspend fun dua(id: Int): Dua? = duas.dua(id)
+    suspend fun dua(id: Int): Dua? = sql()?.dua(id) ?: json.dua(id)
 
     /** The 30 subcategory groups (12 main-adhkar + 18 other-adhkar). */
-    suspend fun categories(): List<DuaCategory> = duas.categories()
+    suspend fun categories(): List<DuaCategory> = sql()?.categories() ?: json.categories()
 
     /** Duas of one subcategory slug (e.g. `morning-evening`). */
-    suspend fun bySubcategory(subcategory: String): List<Dua> = duas.bySubcategory(subcategory)
+    suspend fun bySubcategory(subcategory: String): List<Dua> = sql()?.bySubcategory(subcategory) ?: json.bySubcategory(subcategory)
 
     /**
      * Time-adaptive dua/adhkar sections — the "evening now, so give me evening
@@ -532,7 +550,7 @@ class DuaApi internal constructor(fetcher: ContentFetcher) {
      * null anchors → only ANYTIME sections (graceful no-location mode).
      */
     suspend fun adaptive(ctx: AdaptiveContext): List<AdaptiveDuaSection> =
-        adaptiveImpl(ctx) { slug -> duas.duas().filter { it.subcategory == slug } }
+        adaptiveImpl(ctx) { slug -> duas().filter { it.subcategory == slug } }
 
     /**
      * Batch-evaluator overload: callers holding a pre-indexed corpus
@@ -611,13 +629,13 @@ class DuaApi internal constructor(fetcher: ContentFetcher) {
     // ── reading articles (raw HTML passthrough) ───────────────────────────
 
     /** Article index: 12 categories → 186 entries. */
-    suspend fun articleCategories(): List<DuaArticleCategory> = duas.articleCategories()
+    suspend fun articleCategories(): List<DuaArticleCategory> = json.articleCategories()
 
     /** Flat article list across all categories. */
-    suspend fun articles(): List<DuaArticleInfo> = duas.articles()
+    suspend fun articles(): List<DuaArticleInfo> = json.articles()
 
     /** One article by its [DuaArticleInfo.filePath] — RAW HTML content. */
-    suspend fun article(filePath: String): DuaArticle? = duas.article(filePath)
+    suspend fun article(filePath: String): DuaArticle? = json.article(filePath)
 
     // ── asma ul husna ─────────────────────────────────────────────────────
 
@@ -633,10 +651,10 @@ class DuaApi internal constructor(fetcher: ContentFetcher) {
     // ── local audio mirrors (byte-identical donor Opus; Media3 on Android 12+) ──
 
     /** Repo-relative mirror path (`assets/dua_dhikr/dua_{id}.opus`) or null. */
-    suspend fun localAudioPath(id: Int): String? = duas.localAudioPath(id)
+    suspend fun localAudioPath(id: Int): String? = json.localAudioPath(id)
 
     /** Opus bytes of the local mirror, or null for the 3 mirrorless entries. */
-    suspend fun audio(id: Int): ByteArray? = duas.audio(id)
+    suspend fun audio(id: Int): ByteArray? = json.audio(id)
 }
 
 /**

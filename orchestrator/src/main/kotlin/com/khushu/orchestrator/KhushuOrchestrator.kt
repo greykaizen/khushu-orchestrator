@@ -3,6 +3,7 @@ package com.khushu.orchestrator
 import com.khushu.data.adaptive.AdaptiveContext
 import com.khushu.data.adaptive.AdaptiveDuaSection
 import com.khushu.data.repo.KhushuContent
+import com.khushu.data.store.SqlStoreResolver
 import com.khushu.data.transport.ContentFetcher
 import com.khushu.engine.core.geo.Location
 import com.khushu.engine.KhushuEngine
@@ -174,13 +175,19 @@ internal class DayModelCache(private val capacity: Int = 4) {
 class KhushuOrchestrator(
     // `internal`: the wall. Hosts compose through the namespaces + [content]/
     // [downloads] delegation surfaces — direct engine/data calls (and their
-    // recomputation costs) are uncompilable from host code.
+    // recomputation costs) are uncompilable + wrong-by-construction from host code.
     internal val engine: KhushuEngine = KhushuEngine(),
     /** Host transport decision (cache dir + fetcher) — the singleton's only construction input. */
     fetcher: ContentFetcher,
+    /**
+     * Host-provided SQL resolver (local pack / Turso). Domains covered by a
+     * resolved store serve SQL-backed reads (DayModel dua corpus first);
+     * null → the legacy JSON path. See [com.khushu.data.store.SqlStoreResolver].
+     */
+    resolver: SqlStoreResolver? = null,
 ) : AutoCloseable {
     /** Content retrieval — absorbed from khushu-data-api (v1.4.0); package `com.khushu.data` retained. */
-    internal val data: KhushuContent = KhushuContent(fetcher)
+    internal val data: KhushuContent = KhushuContent(fetcher, resolver)
     private val cache = DayModelCache()
 
     val dua = DuaNamespace(this)
