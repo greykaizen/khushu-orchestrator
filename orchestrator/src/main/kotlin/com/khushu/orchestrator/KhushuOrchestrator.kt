@@ -186,9 +186,16 @@ class KhushuOrchestrator(
      * null → the legacy JSON path. See [com.khushu.data.store.SqlStoreResolver].
      */
     resolver: SqlStoreResolver? = null,
+    /**
+     * Scoped transport for the glyph-atlas bundle zips (v1.7.7). Binary zips
+     * aren't SQL — hosts download the bundle (GH release asset) and inject a
+     * file-backed fetcher here, leaving every JSON domain's fail-fast contract
+     * intact. Null falls back to [fetcher] (legacy hosts unchanged).
+     */
+    atlasFetcher: ContentFetcher? = null,
 ) : AutoCloseable {
     /** Content retrieval — absorbed from khushu-data-api (v1.4.0); package `com.khushu.data` retained. */
-    internal val data: KhushuContent = KhushuContent(fetcher, resolver)
+    internal val data: KhushuContent = KhushuContent(fetcher, resolver, atlasFetcher)
     private val cache = DayModelCache()
 
     val dua = DuaNamespace(this)

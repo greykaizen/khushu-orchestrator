@@ -98,6 +98,7 @@ import com.khushu.data.model.VerseTiming
 import com.khushu.data.model.WbwWord
 import com.khushu.data.quran.ChapterInfoSource
 import com.khushu.data.quran.MushafLayoutSource
+import com.khushu.data.quran.SqlMushafLayoutSource
 import com.khushu.data.quran.QuranMetadataSource
 import com.khushu.data.quran.QuranGlyphSource
 import com.khushu.data.quran.QuranScriptSource
@@ -154,6 +155,13 @@ class KhushuContent(
      * without a restart.
      */
     private val resolver: SqlStoreResolver? = null,
+    /**
+     * Scoped transport for the glyph-atlas bundle zips (v1.7.7). Atlas zips are
+     * binary releases, not SQL — hosts going JSON-less download the bundle and
+     * inject a file-backed fetcher here without reopening the JSON path for any
+     * other domain. Null falls back to [fetcher] (legacy hosts unchanged).
+     */
+    atlasFetcher: ContentFetcher? = null,
 ) : AutoCloseable {
 
     /** True when a JSON fallback exists for domains the resolver doesn't cover. */
@@ -171,7 +179,7 @@ class KhushuContent(
     @OptIn(ExperimentalCoroutinesApi::class)
     internal val sqlDispatcher: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(1)
 
-    val quran: QuranApi = QuranApi(fetcher ?: jsonLessFetcher, sqlDispatcher)
+    val quran: QuranApi = QuranApi(fetcher ?: jsonLessFetcher, sqlDispatcher, resolver, atlasFetcher)
     val catalogs: CatalogApi = CatalogApi(fetcher ?: jsonLessFetcher)
     val curated: CuratedApi = CuratedApi(fetcher ?: jsonLessFetcher)
     val dua: DuaApi = DuaApi(fetcher ?: jsonLessFetcher, resolver)
@@ -231,12 +239,34 @@ class QuranApi internal constructor(
     private val fetcher: ContentFetcher,
     /** Single SQLite thread shared with the sunnah layer — see [KhushuContent]. */
     private val sqlDispatcher: CoroutineDispatcher,
+    /** Pack/Turso resolver: layout + registry reads serve SQL when it yields the quran-core store (v1.7.7). */
+    private val resolver: SqlStoreResolver? = null,
+    /** Scoped transport for the glyph-atlas bundle zips — hosts going JSON-less inject a file-backed one (v1.7.7). */
+    atlasFetcher: ContentFetcher? = null,
 ) : AutoCloseable {
 
     private val scriptSource = QuranScriptSource(fetcher)
     private val metadata = QuranMetadataSource(fetcher)
     private val glyphs = QuranGlyphSource(fetcher)
     private val layout = MushafLayoutSource(fetcher)
+
+    /** Atlas zips ride their OWN transport: file-backed hosts pass [atlasFetcher]; the
+     *  main fetcher stays the fallback so legacy hosts keep working unchanged. */
+    val atlas = QuranAtlasApi(atlasFetcher ?: fetcher)
+
+    // Single-slot memo: the resolver typically returns one stable quran-core store,
+    // so one [SqlMushafLayoutSource] lives for the process (line/registry caches hold).
+    private var sqlLayoutKey: com.khushu.data.store.SqlStore? = null
+    private var sqlLayout: SqlMushafLayoutSource? = null
+
+    private suspend fun sqlLayoutIfResolvable(): SqlMushafLayoutSource? {
+        val store = resolver?.resolve("quran-core") ?: return null
+        if (sqlLayoutKey !== store) {
+            sqlLayout = SqlMushafLayoutSource(store)
+            sqlLayoutKey = store
+        }
+        return sqlLayout
+    }
     private val translations = TranslationPackSource(fetcher, catalog = TranslationCatalogSource(fetcher))
     private val similar = SimilarVersesSource(fetcher)
     private val topics = TopicsSource(fetcher)
@@ -267,8 +297,6 @@ class QuranApi internal constructor(
         idx.search(query, limit, offset)
     }
 
-    /** Mushaf glyph-atlas bundles feeding khushu-engine `engine-mushaf`. */
-    val atlas = QuranAtlasApi(fetcher)
 
     // ── metadata ────────────────────────────────────────────────────────────
 
@@ -427,17 +455,34 @@ class QuranApi internal constructor(
 
     // ── mushaf layout ───────────────────────────────────────────────────────
 
-    suspend fun pageLines(mushaf: String, page: Int): List<PageLine> = layout.pageLines(mushaf, page)
+    suspend fun pageLines(mushaf: String, page: Int): List<PageLine> {
+        val sql = sqlLayoutIfResolvable()
+        val lines = sql?.pageLines(mushaf, page)
+        if (lines != null && lines.isNotEmpty()) return lines
+        return layout.pageLines(mushaf, page)
+    }
 
     /** Rendering script for a mushaf code (atlas bundle + word registry addressing). */
     fun mushafScript(mushafCode: String): String = layout.mushafScriptOf(mushafCode)
-    suspend fun linesOfAyah(mushaf: String, surahNo: Int, ayahNo: Int): List<PageLine> =
-        layout.linesOfAyah(mushaf, surahNo, ayahNo)
-    suspend fun pageOfAyah(mushaf: String, surahNo: Int, ayahNo: Int): Int? =
-        layout.pageOfAyah(mushaf, surahNo, ayahNo)
+    suspend fun linesOfAyah(mushaf: String, surahNo: Int, ayahNo: Int): List<PageLine> {
+        val sql = sqlLayoutIfResolvable()
+        val lines = sql?.linesOfAyah(mushaf, surahNo, ayahNo)
+        if (lines != null && lines.isNotEmpty()) return lines
+        return layout.linesOfAyah(mushaf, surahNo, ayahNo)
+    }
+    suspend fun pageOfAyah(mushaf: String, surahNo: Int, ayahNo: Int): Int? {
+        val sql = sqlLayoutIfResolvable()
+        sql?.pageOfAyah(mushaf, surahNo, ayahNo)?.let { return it }
+        return layout.pageOfAyah(mushaf, surahNo, ayahNo)
+    }
 
     /** Canonical word registry (ayah order) for a rendering script. */
-    suspend fun wordRegistry(script: String): List<RegistryWord> = layout.words(script)
+    suspend fun wordRegistry(script: String): List<RegistryWord> {
+        val sql = sqlLayoutIfResolvable()
+        val words = sql?.words(script)
+        if (words != null && words.isNotEmpty()) return words
+        return layout.words(script)
+    }
 
     // ── insight: similarity, mutashabihat, topics ───────────────────────────
 

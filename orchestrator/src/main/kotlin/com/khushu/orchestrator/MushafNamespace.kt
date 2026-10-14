@@ -184,6 +184,14 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
         )
     }
 
+    /** Number of glyph texture pages a bundle ships (renderer preloads these). */
+    suspend fun textureCount(bundleId: String, sizeLabel: String = "6x"): Int =
+        o.data.quran.atlas.glyphTable(bundleId, sizeLabel).textures.size
+
+    /** One glyph texture page (PNG bytes) — hosts decode once and cache. */
+    suspend fun texture(bundleId: String, textureIndex: Int, sizeLabel: String = "6x"): ByteArray =
+        o.data.quran.atlas.textureBytes(bundleId, textureIndex, sizeLabel)
+
     /**
      * Warm the bundle assets (glyph table, layout docs) + the page-line map
      * for [pages] through the caching transport. Resumable and offline-capable;
