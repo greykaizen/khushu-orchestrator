@@ -198,6 +198,16 @@ class QuranContentPackTest {
         c.close()
     }
 
+    @Test fun theSurahsWordsArriveInOneRead() = runTest {
+        val c = content()
+        val words = c.quran.words(2, "uthmani")
+        assertEquals(7, words.size)
+        assertEquals("وَجَنَّاتٍ", words.first().text)
+        assertEquals(1, words.first().ayahNo)
+        assertEquals(190, words.last().ayahNo)
+        c.close()
+    }
+
     // ── tafsir ─────────────────────────────────────────────────────────────
 
     @Test fun tafsirForAyahReturnsOnlyTheCoveringSegments() = runTest {

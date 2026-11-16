@@ -20,6 +20,7 @@ import com.khushu.data.model.AyahMeta
 import com.khushu.data.model.AyahText
 import com.khushu.data.model.AyahBundle
 import com.khushu.data.model.AyahWord
+import com.khushu.data.model.WordKind
 import com.khushu.data.model.Book
 import com.khushu.data.dua.DuaSource
 import com.khushu.data.dua.AsmaSource
@@ -122,6 +123,9 @@ import com.khushu.data.sunnah.IndexBuildSummary
 import com.khushu.data.sunnah.LocalHadithRepository
 import com.khushu.data.transport.ContentFetcher
 import java.io.File
+
+/** The script the SQL corpus carries (the one the reader renders). */
+private const val UTHMANI_SCRIPT = "uthmani"
 
 /**
  * Single entry point for khushu content — the retrieval half of the Khushu
@@ -367,12 +371,28 @@ class QuranApi internal constructor(
         includeAyahMarker: Boolean = false,
     ): List<AyahText> = scriptSource.ayahTexts(script, surahNo, includeAyahMarker)
 
-    /** Word-level data; `kind` flags ayah-end marker glyphs. */
+    /**
+     * Word-level data; `kind` flags ayah-end marker glyphs.
+     *
+     * The `quran-core` pack serves the uthmani script (one query for the whole
+     * surah); other scripts stay on the JSON path.
+     */
     suspend fun words(
         surahNo: Int,
         script: String = "uthmani",
         includeAyahMarker: Boolean = true,
-    ): List<AyahWord> = scriptSource.words(script, surahNo, includeAyahMarker)
+    ): List<AyahWord> {
+        if (script == UTHMANI_SCRIPT) {
+            val store = packStore("quran-core")
+            if (store != null) {
+                val sql = SqlQuranSource(store).surahWords(surahNo)
+                if (sql.isNotEmpty()) {
+                    return if (includeAyahMarker) sql else sql.filter { it.kind == WordKind.TEXT }
+                }
+            }
+        }
+        return scriptSource.words(script, surahNo, includeAyahMarker)
+    }
 
     // ── grouped composite ──────────────────────────────────────────────────
 

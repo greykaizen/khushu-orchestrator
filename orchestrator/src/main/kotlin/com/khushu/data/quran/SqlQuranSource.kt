@@ -85,6 +85,37 @@ class SqlQuranSource(private val quran: SqlStore) {
         uthmaniWords(surahNo, ayahNo).filter { it.kind == WordKind.TEXT }.joinToString(" ") { it.text }
 
     /**
+     * Every word of one surah (ONE query), as the same [AyahWord] model the
+     * per-ayah read returns — the reader loads a surah at a time.
+     */
+    suspend fun surahWords(surahNo: Int, scriptId: Int = UTHMANI_SCRIPT_ID): List<AyahWord> {
+        val from = surahNo * 1000
+        val to = (surahNo + 1) * 1000
+        val rows = quran.query(
+            "SELECT ayah_id, word_index, text FROM quran_ayah_words " +
+                "WHERE ayah_id>? AND ayah_id<? AND script_id=? ORDER BY ayah_id, word_index",
+            listOf(from, to, scriptId),
+        )
+        return rows.groupBy { it.intAt(0) ?: 0 }.flatMap { (ayahId, ayahRows) ->
+            val ayahSurah = ayahId / 1000
+            val ayahNo = ayahId % 1000
+            ayahRows.mapIndexed { i, r ->
+                val pos = i + 1
+                val text = r.stringAt(2) ?: ""
+                AyahWord(
+                    surahNo = ayahSurah, ayahNo = ayahNo, position = pos, text = text,
+                    location = "$ayahSurah:$ayahNo:$pos",
+                    kind = if (pos == ayahRows.size && text.matches(END_MARKER)) {
+                        WordKind.AYAH_END_MARKER
+                    } else {
+                        WordKind.TEXT
+                    },
+                )
+            }
+        }
+    }
+
+    /**
      * The uthmani words of SEVERAL ayahs in one query (ayah id → words, in
      * reading order). One round trip for a list of matched ayahs — the shape a
      * "similar verses" list needs.
