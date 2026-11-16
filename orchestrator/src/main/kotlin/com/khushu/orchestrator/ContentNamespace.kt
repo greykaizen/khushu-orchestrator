@@ -33,6 +33,8 @@ class ContentNamespace internal constructor(private val o: KhushuOrchestrator) {
     suspend fun duaCategories(): List<DuaCategory> = o.data.dua.categories()
     suspend fun duasBySubcategory(subcategory: String): List<Dua> =
         o.data.dua.bySubcategory(subcategory)
+    suspend fun duaSearch(query: String, limit: Int = 40): List<Dua> =
+        o.data.dua.search(query, limit)
 
     suspend fun duaArticleCategories(): List<DuaArticleCategory> = o.data.dua.articleCategories()
     suspend fun duaArticles(): List<DuaArticleInfo> = o.data.dua.articles()

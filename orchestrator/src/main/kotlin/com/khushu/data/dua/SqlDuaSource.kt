@@ -37,6 +37,39 @@ class SqlDuaSource(private val content: SqlStore, private val assets: AssetResol
         listOf(subcategory),
     ).map { mapDua(it) }
 
+    /**
+     * Full-text search across every dua — title, Arabic, translation,
+     * transliteration, virtue, explanation, reference — through the pack's
+     * `dua_fts` index, joined back to the rows it indexes.
+     *
+     * The user's words become prefix terms ("wear clothes" matches "After
+     * Wearing Clothes"); punctuation is dropped rather than passed through,
+     * because FTS5 treats it as syntax and one stray quote is a query error.
+     * Best matches first (bm25), stable for equal scores.
+     */
+    suspend fun search(query: String, limit: Int = 40): List<Dua> {
+        val match = ftsQuery(query) ?: return emptyList()
+        return content.query(
+            "SELECT d.id, d.post_id, p.post_title, d.category, d.subcategory, d.title, d.arabic, " +
+                "d.repetition, d.translation, d.transliteration, d.virtue, d.explanation, d.reference, d.audio_asset_id " +
+                "FROM dua_fts f JOIN dua_items d ON d.id = f.rowid " +
+                "LEFT JOIN dua_posts p ON p.post_id = d.post_id " +
+                "WHERE dua_fts MATCH ? ORDER BY rank, d.id LIMIT ?",
+            listOf(match, limit),
+        ).map { r -> mapDua(r) }
+    }
+
+    /** "wear clothes" -> "wear* clothes*"; null when nothing searchable is left. */
+    internal fun ftsQuery(raw: String): String? {
+        val terms = raw
+            .map { ch -> if (ch.isLetterOrDigit()) ch else ' ' }
+            .joinToString("")
+            .split(' ')
+            .filter { it.isNotBlank() }
+        if (terms.isEmpty()) return null
+        return terms.joinToString(" ") { "$it*" }
+    }
+
     /** Subcategory slugs present, with dua counts (for a picker). */
     suspend fun subcategoryCounts(): Map<String, Int> = content.query(
         "SELECT subcategory, COUNT(*) FROM dua_items GROUP BY subcategory ORDER BY subcategory",

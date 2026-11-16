@@ -602,6 +602,24 @@ class DuaApi internal constructor(fetcher: ContentFetcher, resolver: SqlStoreRes
     suspend fun bySubcategory(subcategory: String): List<Dua> = sql()?.bySubcategory(subcategory) ?: json.bySubcategory(subcategory)
 
     /**
+     * Full-text search across every dua, best match first. The pack's FTS index
+     * answers it; the JSON path (no pack installed) falls back to a scan, which
+     * is what that path can honestly do.
+     */
+    suspend fun search(query: String, limit: Int = 40): List<Dua> =
+        sql()?.search(query, limit) ?: run {
+            val needle = query.trim()
+            if (needle.isEmpty()) {
+                emptyList()
+            } else {
+                json.duas().filter { dua ->
+                    listOf(dua.title, dua.arabic, dua.translation, dua.transliteration, dua.virtue, dua.explanation, dua.reference.orEmpty())
+                        .any { it.contains(needle, ignoreCase = true) }
+                }.take(limit)
+            }
+        }
+
+    /**
      * Time-adaptive dua/adhkar sections — the "evening now, so give me evening
      * adhkar (+N action buttons)" surface. Deterministic: same [AdaptiveContext]
      * → same sections. Window math + slot table live in
