@@ -190,9 +190,11 @@ class ContentNamespace internal constructor(private val o: KhushuOrchestrator) {
 
     /**
      * The ayahs the corpus records as similar to this one, with the evidence
-     * behind every match (matched words, coverage %, score, word ranges).
+     * behind every match (matched words, coverage %, score, word ranges) and
+     * the matched ayah's text.
      */
-    suspend fun similarVerses(surahNo: Int, ayahNo: Int) = o.data.quran.similarVerses(surahNo, ayahNo)
+    suspend fun similarVerses(surahNo: Int, ayahNo: Int, limit: Int = 20) =
+        o.data.quran.similarVerses(surahNo, ayahNo, limit)
 
     suspend fun mutashabihatPhrases() = o.data.quran.mutashabihatPhrases()
     suspend fun mutashabihatOccurrences(phraseId: Int) =

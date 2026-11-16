@@ -103,6 +103,7 @@ import com.khushu.data.model.TafsirSegment
 import com.khushu.data.model.VerseTiming
 import com.khushu.data.model.WbwWord
 import com.khushu.data.model.WbwWordRow
+import com.khushu.data.model.SimilarAyahMatch
 import com.khushu.data.model.TranslationFootnote
 import com.khushu.data.quran.ChapterInfoSource
 import com.khushu.data.quran.MushafLayoutSource
@@ -621,10 +622,26 @@ class QuranApi internal constructor(
      *
      * The `quran-core` pack serves it; the JSON corpus is the fallback.
      */
-    suspend fun similarVerses(surahNo: Int, ayahNo: Int): List<SimilarVerse> {
+    suspend fun similarVerses(surahNo: Int, ayahNo: Int, limit: Int = 20): List<SimilarAyahMatch> {
         val ayahId = surahNo * 1000 + ayahNo
-        return packStore("quran-core")?.let { SqlSelectionSource(it).similarTo(ayahId) }
-            ?: similar.similarTo(ayahId)
+        val store = packStore("quran-core")
+        val rows = if (store != null) SqlSelectionSource(store).similarTo(ayahId)
+        else similar.similarTo(ayahId)
+        if (rows.isEmpty()) return emptyList()
+        val texts = store?.let { SqlQuranSource(it).wordsForAyahs(rows.map { r -> r.matchedAyahId }) }
+            .orEmpty()
+        return rows.map { r ->
+            val id = r.matchedAyahId
+            SimilarAyahMatch(
+                surahNo = id / 1000,
+                ayahNo = id % 1000,
+                text = texts[id]?.joinToString(" ") { w -> w }.orEmpty(),
+                matchedWords = r.matchedWordsCount,
+                coverage = r.coverage,
+                score = r.score,
+                matchWordRanges = r.matchWords.map { (from, to) -> from..to },
+            )
+        }.take(limit)
     }
     suspend fun mutashabihatPhrases(): List<MutashabihatPhrase> = similar.phrases()
     suspend fun mutashabihatOccurrences(phraseId: Int): List<MutashabihatOccurrence> =

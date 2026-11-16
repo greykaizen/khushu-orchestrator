@@ -150,6 +150,26 @@ data class SimilarVerse(
     val matchWords: List<Pair<Int, Int>>,
 )
 
+/**
+ * One ayah the corpus records as similar to the one being read — the shape a
+ * reader actually wants: WHERE it is, WHAT it says, and WHY the corpus thinks
+ * it matches (the shared words, as indices into the matched ayah's words).
+ */
+data class SimilarAyahMatch(
+    val surahNo: Int,
+    val ayahNo: Int,
+    /** The matched ayah's uthmani text (words joined by spaces). */
+    val text: String = "",
+    /** How many words the two ayahs share. */
+    val matchedWords: Int = 0,
+    /** Percent of the source ayah the match covers. */
+    val coverage: Int = 0,
+    /** The corpus' own strength score (higher = stronger match). */
+    val score: Int = 0,
+    /** Matched word indices of the MATCHED ayah (0-based, inclusive ranges). */
+    val matchWordRanges: List<IntRange> = emptyList(),
+)
+
 data class MutashabihatPhrase(
     val phraseId: Int,
     val surahsCount: Int,

@@ -146,11 +146,13 @@ class QuranContentPackTest {
         val rows = c.quran.similarVerses(2, 255)
         assertEquals(1, rows.size)
         val row = rows.first()
-        assertEquals(3190, row.matchedAyahId)
-        assertEquals(3, row.matchedWordsCount)
+        assertEquals(3, row.surahNo)
+        assertEquals(190, row.ayahNo)
+        assertEquals("إِنَّ فِيهَا عِبَادٌ", row.text)
+        assertEquals(3, row.matchedWords)
         assertEquals(75, row.coverage)
         assertEquals(120, row.score)
-        assertEquals(listOf(0 to 2), row.matchWords)
+        assertEquals(listOf(0..2), row.matchWordRanges)
         c.close()
     }
 

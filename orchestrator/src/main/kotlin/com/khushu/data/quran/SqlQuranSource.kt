@@ -84,6 +84,27 @@ class SqlQuranSource(private val quran: SqlStore) {
     suspend fun ayahText(surahNo: Int, ayahNo: Int): String =
         uthmaniWords(surahNo, ayahNo).filter { it.kind == WordKind.TEXT }.joinToString(" ") { it.text }
 
+    /**
+     * The uthmani words of SEVERAL ayahs in one query (ayah id → words, in
+     * reading order). One round trip for a list of matched ayahs — the shape a
+     * "similar verses" list needs.
+     */
+    suspend fun wordsForAyahs(ayahIds: List<Int>): Map<Int, List<String>> {
+        if (ayahIds.isEmpty()) return emptyMap()
+        val placeholders = ayahIds.joinToString(",") { "?" }
+        val rows = quran.query(
+            "SELECT ayah_id, text FROM quran_ayah_words WHERE ayah_id IN ($placeholders) AND script_id=? " +
+                "ORDER BY ayah_id, word_index",
+            ayahIds + UTHMANI_SCRIPT_ID,
+        )
+        val out = LinkedHashMap<Int, MutableList<String>>()
+        rows.forEach { r ->
+            val id = r.intAt(0) ?: return@forEach
+            out.getOrPut(id) { mutableListOf() }.add(r.stringAt(1) ?: "")
+        }
+        return out
+    }
+
     private companion object { const val UTHMANI_SCRIPT_ID = 1; val END_MARKER = Regex("^[۩۞۝\\u06dd].*|[\\u06dd]$") }
 }
 
