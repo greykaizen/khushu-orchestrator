@@ -168,6 +168,13 @@ class ContentNamespace internal constructor(private val o: KhushuOrchestrator) {
     suspend fun wbwWords(surahNo: Int, ayahNo: Int, lang: String = "en", v2: Boolean = true) =
         o.data.quran.wbwWords(surahNo, ayahNo, lang, v2)
 
+    /**
+     * The WBW rows of a WHOLE surah (ayah no → words) — one read for a reader
+     * showing the surah.
+     */
+    suspend fun wbwWordsForSurah(surahNo: Int, lang: String = "en", v2: Boolean = true) =
+        o.data.quran.wbwWordsForSurah(surahNo, lang, v2)
+
     // ── availability (the honest "is this content here?" probe) ─────────────
 
     /** Whether a translation pack is available (installed pack or remote corpus). */

@@ -105,6 +105,26 @@ class SqlQuranSource(private val quran: SqlStore) {
         return out
     }
 
+    /**
+     * Every ayah's words of one surah (ayah no → words, in reading order) —
+     * ONE query for the whole surah, which is how the reader loads it.
+     */
+    suspend fun wordsForSurah(surahNo: Int, scriptId: Int = UTHMANI_SCRIPT_ID): Map<Int, List<String>> {
+        val from = surahNo * 1000
+        val to = (surahNo + 1) * 1000
+        val rows = quran.query(
+            "SELECT ayah_id, text FROM quran_ayah_words WHERE ayah_id>? AND ayah_id<? AND script_id=? " +
+                "ORDER BY ayah_id, word_index",
+            listOf(from, to, scriptId),
+        )
+        val out = LinkedHashMap<Int, MutableList<String>>()
+        rows.forEach { r ->
+            val id = r.intAt(0) ?: return@forEach
+            out.getOrPut(id) { mutableListOf() }.add(r.stringAt(1) ?: "")
+        }
+        return out
+    }
+
     private companion object { const val UTHMANI_SCRIPT_ID = 1; val END_MARKER = Regex("^[۩۞۝\\u06dd].*|[\\u06dd]$") }
 }
 

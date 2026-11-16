@@ -149,6 +149,7 @@ class QuranContentPackTest {
         assertEquals(3, row.surahNo)
         assertEquals(190, row.ayahNo)
         assertEquals("إِنَّ فِيهَا عِبَادٌ", row.text)
+        assertEquals(listOf("إِنَّ", "فِيهَا", "عِبَادٌ"), row.words)
         assertEquals(3, row.matchedWords)
         assertEquals(75, row.coverage)
         assertEquals(120, row.score)
@@ -182,6 +183,18 @@ class QuranContentPackTest {
     @Test fun wbwWordsOfAnAyahWithoutAPackAreEmpty() = runTest {
         val c = content()
         assertTrue(c.quran.wbwWords(2, 256, lang = "en").isEmpty())
+        c.close()
+    }
+
+    @Test fun wbwWordsForASurahArriveInOneRead() = runTest {
+        val c = content()
+        val surah = c.quran.wbwWordsForSurah(2, lang = "en")
+        assertEquals(1, surah.size)
+        val words = surah.getValue(2255)
+        assertEquals(4, words.size)
+        assertEquals("وَجَنَّاتٍ", words[0].arabic)
+        assertEquals("Gardens", words[0].translation)
+        assertEquals("۝", words[3].arabic)
         c.close()
     }
 

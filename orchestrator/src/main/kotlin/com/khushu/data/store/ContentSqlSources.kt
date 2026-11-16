@@ -134,6 +134,32 @@ class SqlWbwSource(private val pack: SqlStore, private val json: Json = Json { i
             listOf(lang),
         ).mapNotNull { it.intAt(0) }
 
+    /**
+     * The words of every ayah of a surah (ayah id → ordinal → word). One
+     * query for a whole surah — the reader shows a surah, not one ayah.
+     */
+    suspend fun wordsForSurah(
+        surahNo: Int,
+        lang: String,
+        version: Int = 2,
+    ): Map<Int, List<WbwWord?>> {
+        val from = surahNo * 1000
+        val to = (surahNo + 1) * 1000
+        val out = LinkedHashMap<Int, MutableList<WbwWord?>>()
+        pack.query(
+            "SELECT ayah_id, ordinal, word_json FROM wbw_words " +
+                "WHERE lang_code=? AND version=? AND ayah_id>? AND ayah_id<? ORDER BY ayah_id, ordinal",
+            listOf(lang, version, from, to),
+        ).forEach { r ->
+            val ayahId = r.intAt(0) ?: return@forEach
+            val ord = r.intAt(1) ?: return@forEach
+            val words = out.getOrPut(ayahId) { mutableListOf() }
+            while (words.size < ord) words.add(null)
+            words.add(parseWord(r.stringAt(2)))
+        }
+        return out
+    }
+
     private fun parseWord(jsonStr: String?): WbwWord? {
         if (jsonStr.isNullOrBlank()) return null
         return try {

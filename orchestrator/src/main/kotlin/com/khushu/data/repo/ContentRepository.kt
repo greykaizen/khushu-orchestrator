@@ -555,6 +555,38 @@ class QuranApi internal constructor(
         }
     }
 
+    /**
+     * The WBW rows of a WHOLE surah, joined to their Arabic words — one read
+     * for the reader's per-word view (a reader shows a surah, not one ayah at
+     * a time). Ayah no → words, in reading order.
+     */
+    suspend fun wbwWordsForSurah(
+        surahNo: Int,
+        lang: String = "en",
+        v2: Boolean = true,
+    ): Map<Int, List<WbwWordRow>> {
+        val store = packStore("wbw-$lang") ?: return emptyMap()
+        val src = SqlWbwSource(store)
+        val version = if (v2) 2 else 1
+        var glosses = src.wordsForSurah(surahNo, lang, version)
+        if (glosses.isEmpty() && version != 1) glosses = src.wordsForSurah(surahNo, lang, 1)
+        if (glosses.isEmpty()) return emptyMap()
+        val arabic = packStore("quran-core")
+            ?.let { SqlQuranSource(it).wordsForSurah(surahNo) }
+            .orEmpty()
+        return glosses.mapValues { (ayahId, words) ->
+            val ayahWords = arabic[ayahId].orEmpty()
+            words.mapIndexed { i, w ->
+                WbwWordRow(
+                    index = i,
+                    arabic = ayahWords.getOrNull(i) ?: "",
+                    translation = w?.translation ?: "",
+                    transliteration = w?.transliteration,
+                )
+            }
+        }
+    }
+
     // ── chapter info ────────────────────────────────────────────────────────
 
     suspend fun chapterInfo(
@@ -632,10 +664,12 @@ class QuranApi internal constructor(
             .orEmpty()
         return rows.map { r ->
             val id = r.matchedAyahId
+            val words = texts[id].orEmpty()
             SimilarAyahMatch(
                 surahNo = id / 1000,
                 ayahNo = id % 1000,
-                text = texts[id]?.joinToString(" ") { w -> w }.orEmpty(),
+                text = words.joinToString(" "),
+                words = words,
                 matchedWords = r.matchedWordsCount,
                 coverage = r.coverage,
                 score = r.score,

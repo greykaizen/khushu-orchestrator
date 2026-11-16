@@ -160,6 +160,11 @@ data class SimilarAyahMatch(
     val ayahNo: Int,
     /** The matched ayah's uthmani text (words joined by spaces). */
     val text: String = "",
+    /**
+     * The matched ayah's words, in order — the reader highlights the matched
+     * ones, and a word range indexes THIS list.
+     */
+    val words: List<String> = emptyList(),
     /** How many words the two ayahs share. */
     val matchedWords: Int = 0,
     /** Percent of the source ayah the match covers. */
