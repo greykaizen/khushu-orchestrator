@@ -139,14 +139,45 @@ class ContentNamespace internal constructor(private val o: KhushuOrchestrator) {
         o.data.quran.translationPacks(langCode)
     suspend fun translationText(packId: String, surahNo: Int? = null) =
         o.data.quran.translationText(packId, surahNo)
+
+    /** One ayah's translation from a pack (the reader's per-ayah text). */
+    suspend fun translationForAyah(packId: String, surahNo: Int, ayahNo: Int) =
+        o.data.quran.translationForAyah(packId, surahNo, ayahNo)
+
+    /** Footnote rows of one ayah in a translation pack. */
+    suspend fun translationFootnotes(packId: String, surahNo: Int, ayahNo: Int) =
+        o.data.quran.translationFootnotes(packId, surahNo, ayahNo)
+
     suspend fun tafsirForSurah(slug: String, surahNo: Int, lang: String = "en") =
         o.data.quran.tafsirForSurah(slug, surahNo, lang)
+
+    /** The tafsir segments covering one ayah (segments span verse ranges). */
+    suspend fun tafsirForAyah(slug: String, surahNo: Int, ayahNo: Int, lang: String = "en") =
+        o.data.quran.tafsirForAyah(slug, surahNo, ayahNo, lang)
 
     suspend fun wbwLanguages(v2: Boolean = true) = o.data.quran.wbwLanguages(v2)
     suspend fun wbwForSurah(surahNo: Int, lang: String = "en", v2: Boolean = true) =
         o.data.quran.wbwForSurah(surahNo, lang, v2)
     suspend fun wbwWord(surahNo: Int, ayahNo: Int, wordIndex: Int, lang: String = "en", v2: Boolean = true) =
         o.data.quran.wbwWord(surahNo, ayahNo, wordIndex, lang, v2)
+
+    /**
+     * The WBW words of one ayah, joined to their Arabic text — the reader's
+     * per-word view (word → transliteration → meaning).
+     */
+    suspend fun wbwWords(surahNo: Int, ayahNo: Int, lang: String = "en", v2: Boolean = true) =
+        o.data.quran.wbwWords(surahNo, ayahNo, lang, v2)
+
+    // ── availability (the honest "is this content here?" probe) ─────────────
+
+    /** Whether a translation pack is available (installed pack or remote corpus). */
+    suspend fun translationAvailable(packId: String) = o.data.quran.hasPack("translation-$packId")
+
+    /** Whether a tafsir book is available. */
+    suspend fun tafsirAvailable(slug: String) = o.data.quran.hasPack("tafsir-$slug")
+
+    /** Whether a word-by-word language pack is available. */
+    suspend fun wbwAvailable(lang: String) = o.data.quran.hasPack("wbw-$lang")
 
     suspend fun chapterInfo(surahNo: Int, lang: String = "en") =
         o.data.quran.chapterInfo(surahNo, lang)
@@ -156,6 +187,13 @@ class ContentNamespace internal constructor(private val o: KhushuOrchestrator) {
     // ── quran — topics & similar verses ────────────────────────────────────
 
     suspend fun similarTo(ayahId: Int) = o.data.quran.similarTo(ayahId)
+
+    /**
+     * The ayahs the corpus records as similar to this one, with the evidence
+     * behind every match (matched words, coverage %, score, word ranges).
+     */
+    suspend fun similarVerses(surahNo: Int, ayahNo: Int) = o.data.quran.similarVerses(surahNo, ayahNo)
+
     suspend fun mutashabihatPhrases() = o.data.quran.mutashabihatPhrases()
     suspend fun mutashabihatOccurrences(phraseId: Int) =
         o.data.quran.mutashabihatOccurrences(phraseId)

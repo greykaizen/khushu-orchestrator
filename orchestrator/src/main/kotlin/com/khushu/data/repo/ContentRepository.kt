@@ -13,6 +13,7 @@ import com.khushu.data.content.CuratedContentSource
 import com.khushu.data.content.RecommendedSource
 import com.khushu.data.content.ScienceTopicsSource
 import com.khushu.data.content.SimilarVersesSource
+import com.khushu.data.content.SqlSelectionSource
 import com.khushu.data.content.TopicsSource
 import com.khushu.data.content.VerseSet
 import com.khushu.data.model.AyahMeta
@@ -25,7 +26,12 @@ import com.khushu.data.dua.AsmaSource
 import com.khushu.data.dua.SqlDuaSource
 import com.khushu.data.store.AssetResolver
 import com.khushu.data.store.SqlEventsSource
+import com.khushu.data.store.SqlStore
 import com.khushu.data.store.SqlStoreResolver
+import com.khushu.data.store.SqlWbwSource
+import com.khushu.data.quran.SqlQuranSource
+import com.khushu.data.quran.SqlTafsirSource
+import com.khushu.data.quran.SqlTranslationSource
 import com.khushu.data.sunnah.SunnahBookSource
 import com.khushu.data.model.AdhanEntry
 import com.khushu.data.model.AdhanReciter
@@ -96,6 +102,8 @@ import com.khushu.data.model.ReciterInfo
 import com.khushu.data.model.TafsirSegment
 import com.khushu.data.model.VerseTiming
 import com.khushu.data.model.WbwWord
+import com.khushu.data.model.WbwWordRow
+import com.khushu.data.model.TranslationFootnote
 import com.khushu.data.quran.ChapterInfoSource
 import com.khushu.data.quran.MushafLayoutSource
 import com.khushu.data.quran.SqlMushafLayoutSource
@@ -267,6 +275,23 @@ class QuranApi internal constructor(
         }
         return sqlLayout
     }
+
+    /**
+     * The host-resolved store for a logical pack id ("quran-core",
+     * "translation-<packId>", "tafsir-<slug>", "wbw-<lang>"), or null when the
+     * host has neither an installed pack nor a remote corpus for it.
+     *
+     * Resolved per call on purpose: a pack installed (or deleted) later flips
+     * the domain without a restart.
+     */
+    private suspend fun packStore(packId: String): SqlStore? = resolver?.resolve(packId)
+
+    /**
+     * Whether a pack-backed source exists for a logical pack id — the honest
+     * "is this content available?" probe a host asks before it renders an
+     * empty state (no exception, no fetch).
+     */
+    suspend fun hasPack(packId: String): Boolean = packStore(packId) != null
     private val translations = TranslationPackSource(fetcher, catalog = TranslationCatalogSource(fetcher))
     private val similar = SimilarVersesSource(fetcher)
     private val topics = TopicsSource(fetcher)
@@ -406,16 +431,63 @@ class QuranApi internal constructor(
     // ── translations ────────────────────────────────────────────────────────
 
     suspend fun translationPacks(langCode: String? = null): List<TranslationPackInfo> =
-        translations.availablePacks(langCode)
+        packStore("quran-core")?.let { SqlTranslationSource("", it).packs(langCode) }
+            ?: translations.availablePacks(langCode)
 
-    suspend fun translationText(packId: String, surahNo: Int? = null): List<TranslatedAyah> =
-        translations.verses(packId, surahNo)
+    suspend fun translationText(packId: String, surahNo: Int? = null): List<TranslatedAyah> {
+        val store = packStore("translation-$packId")
+        if (store != null) {
+            val src = SqlTranslationSource(packId, store)
+            return if (surahNo == null) src.allAyahs() else src.ayahs(surahNo)
+        }
+        return translations.verses(packId, surahNo)
+    }
+
+    /**
+     * One ayah's translation from a pack — the reader's per-ayah text.
+     * The `translation-<packId>` pack serves it; the JSON corpus is the fallback.
+     *
+     * A pack that simply does not carry this ayah answers null — it never falls
+     * through to the JSON path (an installed pack IS the truth).
+     */
+    suspend fun translationForAyah(packId: String, surahNo: Int, ayahNo: Int): TranslatedAyah? {
+        val store = packStore("translation-$packId")
+        return if (store != null) SqlTranslationSource(packId, store).ayah(surahNo, ayahNo)
+        else translations.verses(packId, surahNo).firstOrNull { it.ayahNo == ayahNo }
+    }
+
+    /**
+     * Footnote rows of one ayah in a translation pack (the donor keeps footnote
+     * markers inline in the text; the rows carry the note bodies).
+     */
+    suspend fun translationFootnotes(packId: String, surahNo: Int, ayahNo: Int): List<TranslationFootnote> =
+        packStore("translation-$packId")
+            ?.let { SqlTranslationSource(packId, it).footnotes(surahNo, ayahNo) }
+            .orEmpty()
 
     // ── tafsir ──────────────────────────────────────────────────────────────
 
     /** Tafsir books are listed via [CatalogApi.tafsirs]; here: content by slug. */
     suspend fun tafsirForSurah(slug: String, surahNo: Int, lang: String = "en"): List<TafsirSegment> =
-        tafsir.forSurah(slug, surahNo, lang)
+        packStore("tafsir-$slug")?.let { SqlTafsirSource(slug, it).forSurah(surahNo) }
+            ?: tafsir.forSurah(slug, surahNo, lang)
+
+    /**
+     * The tafsir segments covering ONE ayah (a segment spans a verse range, so
+     * an ayah can fall inside a longer commentary). The `tafsir-<slug>` pack
+     * serves it; the JSON corpus is the fallback.
+     */
+    suspend fun tafsirForAyah(
+        slug: String,
+        surahNo: Int,
+        ayahNo: Int,
+        lang: String = "en",
+    ): List<TafsirSegment> {
+        val store = packStore("tafsir-$slug")
+        val segments = if (store != null) SqlTafsirSource(slug, store).forSurah(surahNo)
+        else tafsir.forSurah(slug, surahNo, lang)
+        return segments.filter { ayahNo >= it.fromVerse && ayahNo <= it.toVerse }
+    }
 
     // ── word-by-word ────────────────────────────────────────────────────────
 
@@ -423,10 +495,64 @@ class QuranApi internal constructor(
 
     /** WBW data of one surah: ayahNo → wordIndex (0-based) → [WbwWord]. */
     suspend fun wbwForSurah(surahNo: Int, lang: String = "en", v2: Boolean = true): Map<Int, Map<Int, WbwWord>> =
-        wbw.forSurah(surahNo, lang, v2)
+        packStore("wbw-$lang")?.let { store ->
+            val src = SqlWbwSource(store)
+            val version = if (v2) 2 else 1
+            src.langPack(lang, version).forSurah(surahNo)
+        } ?: wbw.forSurah(surahNo, lang, v2)
 
-    suspend fun wbwWord(surahNo: Int, ayahNo: Int, wordIndex: Int, lang: String = "en", v2: Boolean = true): WbwWord? =
-        wbw.word(surahNo, ayahNo, wordIndex, lang, v2)
+    suspend fun wbwWord(surahNo: Int, ayahNo: Int, wordIndex: Int, lang: String = "en", v2: Boolean = true): WbwWord? {
+        val store = packStore("wbw-$lang")
+        return if (store != null) {
+            val src = SqlWbwSource(store)
+            src.wordsForAyah(surahNo * 1000 + ayahNo, lang, if (v2) 2 else 1).getOrNull(wordIndex)
+        } else {
+            wbw.word(surahNo, ayahNo, wordIndex, lang, v2)
+        }
+    }
+
+    /**
+     * The WBW words of ONE ayah, joined to their Arabic text — the reader's
+     * per-word view (word → transliteration → meaning).
+     *
+     * The `wbw-<lang>` pack serves the glosses and the `quran-core` pack the
+     * Arabic words; both tokenize an ayah the same way, so the join is by
+     * index. The pack's ordinals include the trailing ayah-end marker, which
+     * carries no gloss of its own.
+     */
+    suspend fun wbwWords(
+        surahNo: Int,
+        ayahNo: Int,
+        lang: String = "en",
+        v2: Boolean = true,
+    ): List<WbwWordRow> {
+        val ayahId = surahNo * 1000 + ayahNo
+        val store = packStore("wbw-$lang")
+        val glosses: List<WbwWord?> = if (store != null) {
+            val src = SqlWbwSource(store)
+            val version = if (v2) 2 else 1
+            val rows = src.wordsForAyah(ayahId, lang, version)
+            if (rows.isEmpty() && version != 1) src.wordsForAyah(ayahId, lang, 1) else rows
+        } else {
+            // JSON corpus fallback: the same glosses, keyed by word index.
+            wbw.forSurah(surahNo, lang, v2)[ayahNo]
+                ?.toSortedMap()
+                ?.map { it.value }
+                ?: emptyList()
+        }
+        if (glosses.isEmpty()) return emptyList()
+        val arabic = packStore("quran-core")
+            ?.let { SqlQuranSource(it).uthmaniWords(surahNo, ayahNo).map { it.text } }
+            .orEmpty()
+        return glosses.mapIndexed { i, w ->
+            WbwWordRow(
+                index = i,
+                arabic = arabic.getOrNull(i) ?: "",
+                translation = w?.translation ?: "",
+                transliteration = w?.transliteration,
+            )
+        }
+    }
 
     // ── chapter info ────────────────────────────────────────────────────────
 
@@ -487,6 +613,19 @@ class QuranApi internal constructor(
     // ── insight: similarity, mutashabihat, topics ───────────────────────────
 
     suspend fun similarTo(ayahId: Int): List<SimilarVerse> = similar.similarTo(ayahId)
+
+    /**
+     * The ayahs the corpus records as similar to this one, WITH the evidence
+     * behind every match: matched word count, coverage %, score and the
+     * matched word-index ranges (so a reader can see WHICH words repeat).
+     *
+     * The `quran-core` pack serves it; the JSON corpus is the fallback.
+     */
+    suspend fun similarVerses(surahNo: Int, ayahNo: Int): List<SimilarVerse> {
+        val ayahId = surahNo * 1000 + ayahNo
+        return packStore("quran-core")?.let { SqlSelectionSource(it).similarTo(ayahId) }
+            ?: similar.similarTo(ayahId)
+    }
     suspend fun mutashabihatPhrases(): List<MutashabihatPhrase> = similar.phrases()
     suspend fun mutashabihatOccurrences(phraseId: Int): List<MutashabihatOccurrence> =
         similar.occurrencesOf(phraseId)

@@ -115,6 +115,25 @@ class SqlWbwSource(private val pack: SqlStore, private val json: Json = Json { i
         return WbwLangPack(lang, version, verses as Map<Int, Map<Int, WbwWord>>)
     }
 
+    /**
+     * One ayah's words, in pack order (ordinal 0-based, including the trailing
+     * ayah-end marker entry). A null slot means the row exists but its
+     * `word_json` did not parse — the index still counts, so the join with the
+     * quran corpus' word order stays aligned.
+     */
+    suspend fun wordsForAyah(ayahId: Int, lang: String, version: Int = 2): List<WbwWord?> =
+        pack.query(
+            "SELECT ordinal, word_json FROM wbw_words WHERE lang_code=? AND version=? AND ayah_id=? ORDER BY ordinal",
+            listOf(lang, version, ayahId),
+        ).map { r -> parseWord(r.stringAt(1)) }
+
+    /** The versions this pack actually carries for a language (1 and/or 2). */
+    suspend fun versions(lang: String): List<Int> =
+        pack.query(
+            "SELECT DISTINCT version FROM wbw_words WHERE lang_code=? ORDER BY version",
+            listOf(lang),
+        ).mapNotNull { it.intAt(0) }
+
     private fun parseWord(jsonStr: String?): WbwWord? {
         if (jsonStr.isNullOrBlank()) return null
         return try {

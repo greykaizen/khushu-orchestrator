@@ -5,6 +5,7 @@ import com.khushu.data.model.AyahWord
 import com.khushu.data.model.Surah
 import com.khushu.data.model.SurahName
 import com.khushu.data.model.TranslatedAyah
+import com.khushu.data.model.TranslationFootnote
 import com.khushu.data.model.TranslationPackInfo
 import com.khushu.data.model.WordKind
 import com.khushu.data.store.SqlStore
@@ -114,6 +115,39 @@ class SqlTranslationSource(
             listOf(packId, surahNo),
         ).map { r -> TranslatedAyah(packId, r.intAt(0) ?: surahNo, r.intAt(1) ?: 0, r.stringAt(2) ?: "") }
 
+    /** Every ayah of this pack (the whole translation, in reading order). */
+    suspend fun allAyahs(): List<TranslatedAyah> =
+        store.query(
+            "SELECT surah_no, ayah_no, translation FROM translation_ayahs WHERE pack_id=? ORDER BY surah_no, ayah_no",
+            listOf(packId),
+        ).map { r -> TranslatedAyah(packId, r.intAt(0) ?: 0, r.intAt(1) ?: 0, r.stringAt(2) ?: "") }
+
+    /**
+     * The registry of translation packs this store knows (`translation_packs`):
+     * every pack id with its language, author and display name. The quran-core
+     * pack carries the full registry; a per-pack store carries only its own row.
+     */
+    suspend fun packs(langCode: String? = null): List<TranslationPackInfo> {
+        val rows = if (langCode == null)
+            store.query(
+                "SELECT pack_id, lang_code, book, author, display_name, lang_name, version, path " +
+                    "FROM translation_packs ORDER BY lang_code, pack_id",
+            )
+        else
+            store.query(
+                "SELECT pack_id, lang_code, book, author, display_name, lang_name, version, path " +
+                    "FROM translation_packs WHERE lang_code=? ORDER BY pack_id",
+                listOf(langCode),
+            )
+        return rows.map { r ->
+            TranslationPackInfo(
+                id = r.stringAt(0) ?: packId, langCode = r.stringAt(1) ?: "", book = r.stringAt(2) ?: "",
+                author = r.stringAt(3), displayName = r.stringAt(4) ?: "", langName = r.stringAt(5),
+                version = r.intAt(6) ?: 1, downloadPath = r.stringAt(7),
+            )
+        }
+    }
+
     suspend fun ayah(surahNo: Int, ayahNo: Int): TranslatedAyah? =
         store.query(
             "SELECT surah_no, ayah_no, translation FROM translation_ayahs WHERE pack_id=? AND surah_no=? AND ayah_no=?",
@@ -128,4 +162,16 @@ class SqlTranslationSource(
                 "WHERE translation_fts MATCH ? ORDER BY ta.surah_no, ta.ayah_no LIMIT ?",
             listOf(query, limit),
         ).map { r -> TranslatedAyah(packId, r.intAt(0) ?: 0, r.intAt(1) ?: 0, r.stringAt(2) ?: "") }
+
+    /**
+     * Footnote rows of one ayah (`translation_footnotes`: pack_id, surah_no,
+     * ayah_no, fn_index, text). The donor keeps footnote markers inline in the
+     * translation text; the rows carry the note bodies.
+     */
+    suspend fun footnotes(surahNo: Int, ayahNo: Int): List<TranslationFootnote> =
+        store.query(
+            "SELECT fn_index, text FROM translation_footnotes " +
+                "WHERE pack_id=? AND surah_no=? AND ayah_no=? ORDER BY fn_index",
+            listOf(packId, surahNo, ayahNo),
+        ).map { r -> TranslationFootnote(r.intAt(0) ?: 0, r.stringAt(1) ?: "") }
 }

@@ -51,8 +51,8 @@ class QuranLayoutResolverTest {
     fun pageLinesServeFromPackWithoutAnyJsonTransport() = runTest {
         val c = content()
         val lines = c.quran.pageLines("qpc", 1)
-        assertTrue("page 1 must have lines", lines.isNotEmpty())
-        assertTrue("page 1 must carry ayah lines", lines.any { it.type == com.khushu.data.model.LineType.AYAH })
+        assertTrue(lines.isNotEmpty(), "page 1 must have lines")
+        assertTrue(lines.any { it.type == com.khushu.data.model.LineType.AYAH }, "page 1 must carry ayah lines")
         c.close()
     }
 
@@ -60,8 +60,8 @@ class QuranLayoutResolverTest {
     fun wordRegistryServesFromPackWithoutAnyJsonTransport() = runTest {
         val c = content()
         val words = c.quran.wordRegistry("uthmani")
-        assertEquals("registry must be the full uthmani corpus", 83_665, words.size)
-        assertEquals("first word of the corpus", 1001, words.first().ayahId)
+        assertEquals(83_665, words.size, "registry must be the full uthmani corpus")
+        assertEquals(1001, words.first().ayahId, "first word of the corpus")
         c.close()
     }
 
@@ -70,12 +70,12 @@ class QuranLayoutResolverTest {
         val atlasFetcher = ContentFetcher { path -> File(repoRoot, path).readBytes() }
         val c = content(atlasFetcher)
         val catalog = c.quran.atlas.bundles()
-        assertTrue("catalog must list uthmani", catalog.any { it.id == "uthmani" })
+        assertTrue(catalog.any { it.id == "uthmani" }, "catalog must list uthmani")
         val layer = c.quran.atlas.glyphTable("uthmani")
-        assertTrue("glyph table must be populated", layer.glyphs.isNotEmpty())
-        assertTrue("bundle must ship texture pages", layer.textures.isNotEmpty())
+        assertTrue(layer.glyphs.isNotEmpty(), "glyph table must be populated")
+        assertTrue(layer.textures.isNotEmpty(), "bundle must ship texture pages")
         val png = c.quran.atlas.textureBytes("uthmani", layer.textures.first().index)
-        assertTrue("texture PNG must be non-trivial", png.size > 10_000)
+        assertTrue(png.size > 10_000, "texture PNG must be non-trivial")
         c.close()
     }
 }

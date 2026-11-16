@@ -265,6 +265,28 @@ data class ChapterInfo(
 /** One WBW word: translation plus optional transliteration. */
 data class WbwWord(val translation: String, val transliteration: String? = null)
 
+/**
+ * One WBW word JOINED to its Arabic word text — the reader's per-word view.
+ *
+ * The two corpora tokenize an ayah the same way (the WBW pack's ordinals are
+ * 0-based and include a trailing ayah-end marker entry), so the join is by
+ * index. [arabic] is empty when the quran pack has no word at that index;
+ * [translation] is empty when the WBW pack has no gloss for it.
+ */
+data class WbwWordRow(
+    /** 0-based word index within the ayah. */
+    val index: Int,
+    /** The Arabic word text (from the quran corpus). */
+    val arabic: String = "",
+    /** The word's gloss in the chosen language. */
+    val translation: String = "",
+    /** Transliteration, when the pack ships one. */
+    val transliteration: String? = null,
+)
+
+/** One translation footnote row (index + text) of an ayah. */
+data class TranslationFootnote(val index: Int, val text: String)
+
 /** Parsed WBW language pack (whole Quran, keyed by ayah_id). */
 data class WbwLangPack(
     val langCode: String,
