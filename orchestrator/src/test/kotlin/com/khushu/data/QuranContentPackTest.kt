@@ -201,10 +201,12 @@ class QuranContentPackTest {
     @Test fun theSurahsWordsArriveInOneRead() = runTest {
         val c = content()
         val words = c.quran.words(2, "uthmani")
-        assertEquals(7, words.size)
+        // the fixture's surah 2 carries one ayah (2:255, four words); 3:190
+        // belongs to surah 3 and must not leak in
+        assertEquals(4, words.size)
         assertEquals("وَجَنَّاتٍ", words.first().text)
         assertEquals(1, words.first().ayahNo)
-        assertEquals(190, words.last().ayahNo)
+        assertEquals(255, words.last().ayahNo)
         c.close()
     }
 
