@@ -30,6 +30,7 @@ typealias DateLineHijri = com.khushu.engine.calendar.DateLine.Hijri
 typealias DateLineGregorian = com.khushu.engine.calendar.DateLine.Gregorian
 typealias DateLineRegional = com.khushu.engine.calendar.DateLine.Regional
 typealias CalendarSide = com.khushu.engine.calendar.CalendarConfiguration.Side
+typealias HijriDate = com.khushu.engine.calendar.HijriDate
 typealias DualDate = com.khushu.engine.calendar.DualDate
 typealias DualDates = com.khushu.engine.calendar.DualDates
 
@@ -38,3 +39,25 @@ typealias Location = com.khushu.engine.core.geo.Location
 typealias Latitude = com.khushu.engine.core.geo.Latitude
 typealias Longitude = com.khushu.engine.core.geo.Longitude
 typealias AltitudeMeters = com.khushu.engine.core.geo.AltitudeMeters
+
+// ── dimensional units ──────────────────────────────────────────────────────
+typealias Degrees = com.khushu.engine.core.units.Degrees
+typealias Kilometers = com.khushu.engine.core.units.Kilometers
+
+// ── qibla results ──────────────────────────────────────────────────────────
+typealias QiblaBearing = com.khushu.engine.qibla.QiblaBearing
+typealias BearingAndDistance = com.khushu.engine.qibla.BearingAndDistance
+typealias SunQiblaRelation = com.khushu.engine.qibla.SunQiblaRelation
+
+// ── qada (excused-range) configuration + results ───────────────────────────
+// Qada's types are nested inside `object Qada`; Kotlin cannot dereference a
+// nested class through a typealias, so each gets its own top-level alias.
+typealias QadaSchool = com.khushu.engine.prayer.Qada.QadaSchool
+typealias BoundaryPairing = com.khushu.engine.prayer.Qada.BoundaryPairing
+typealias QadaConfig = com.khushu.engine.prayer.Qada.QadaConfig
+typealias FiqhPeriod = com.khushu.engine.prayer.Qada.FiqhPeriod
+typealias FiqhPeriodType = com.khushu.engine.prayer.Qada.FiqhPeriodType
+typealias PrayerInstance = com.khushu.engine.prayer.Qada.PrayerInstance
+typealias BoundaryRuling = com.khushu.engine.prayer.Qada.BoundaryRuling
+typealias QadaReport = com.khushu.engine.prayer.Qada.QadaReport
+typealias DaySchedule = com.khushu.engine.prayer.Qada.DaySchedule

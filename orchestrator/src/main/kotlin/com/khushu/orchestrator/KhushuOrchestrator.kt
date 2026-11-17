@@ -200,6 +200,8 @@ class KhushuOrchestrator(
 
     val dua = DuaNamespace(this)
     val prayer = PrayerNamespace(this)
+    val qada = QadaNamespace(this)
+    val qibla = QiblaNamespace(this)
     val calendar = CalendarNamespace(this)
     val mushaf = MushafNamespace(this)
 

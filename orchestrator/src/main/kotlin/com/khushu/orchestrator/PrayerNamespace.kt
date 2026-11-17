@@ -4,12 +4,15 @@ import com.khushu.engine.prayer.PrayerStatus
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 /**
  * Prayer presentation composites — served from the cached [DayModel] (zero
@@ -36,6 +39,61 @@ class PrayerNamespace internal constructor(private val o: KhushuOrchestrator) {
      */
     suspend fun status(key: DayKey, now: Instant): PrayerStatus =
         deriveStatus(key, now)
+
+    /**
+     * One-stop home-screen snapshot: the cached day's full prayer times plus
+     * the current [PrayerStatus] and the next precomputed trigger boundary —
+     * a single call for hosts that render all three together. The status may
+     * derive from a neighbouring day's chain (see [status]); [times]/[key] are
+     * the plan for [key] itself.
+     */
+    suspend fun dayOverview(key: DayKey, now: Instant): PrayerDayOverview {
+        val model = o.dayModel(key)
+        return PrayerDayOverview(
+            key = key,
+            date = key.date,
+            zoneId = key.zoneId,
+            times = model.prayerTimes,
+            status = status(key, now),
+            nextBoundary = model.nextBoundary(now),
+        )
+    }
+
+    /**
+     * Reactive [dayOverview]: reuses [statusFlow]'s boundary-wake timer (no
+     * duplicated polling/arithmetic) and maps each emitted status onto a fresh
+     * overview, tracking the civil date of `now`. Suspend only because the
+     * initial value needs a cold day build — the flow itself is hot in [scope].
+     */
+    suspend fun dayOverviewFlow(
+        key: DayKey,
+        scope: CoroutineScope,
+        startNow: Instant,
+        maxWait: Duration = Duration.ofHours(1),
+        nowNow: () -> Instant = { Instant.now() },
+        timeScale: Double = 1.0,
+    ): StateFlow<PrayerDayOverview> {
+        require(timeScale > 0) { "timeScale must be positive" }
+        val state = MutableStateFlow(dayOverview(key, startNow))
+        val statuses = statusFlow(key, scope, startNow, maxWait, nowNow, timeScale)
+        scope.launch {
+            statuses.collect { s ->
+                val civilKey = key.copy(
+                    date = ZonedDateTime.ofInstant(s.now, key.zoneId).toLocalDate(),
+                )
+                val model = o.dayModel(civilKey)
+                state.value = PrayerDayOverview(
+                    key = civilKey,
+                    date = civilKey.date,
+                    zoneId = civilKey.zoneId,
+                    times = model.prayerTimes,
+                    status = s,
+                    nextBoundary = model.nextBoundary(s.now),
+                )
+            }
+        }
+        return state.asStateFlow()
+    }
 
     /**
      * The home-screen countdown loop — same boundary-wake machinery as
@@ -181,6 +239,16 @@ class PrayerNamespace internal constructor(private val o: KhushuOrchestrator) {
         }
     }
 }
+
+/** Home-screen snapshot: the day's prayer times + current status + next boundary. */
+data class PrayerDayOverview(
+    val key: DayKey,
+    val date: LocalDate,
+    val zoneId: ZoneId,
+    val times: com.khushu.engine.prayer.PrayerTimesResult,
+    val status: PrayerStatus,
+    val nextBoundary: Instant?,
+)
 
 /** One schedulable prayer entry — the pure "when" for host alarm scheduling. */
 data class AlarmInstant(

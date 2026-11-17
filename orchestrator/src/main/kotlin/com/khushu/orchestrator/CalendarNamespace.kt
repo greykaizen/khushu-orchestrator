@@ -14,6 +14,10 @@ import java.time.ZoneId
  */
 class CalendarNamespace internal constructor(private val o: KhushuOrchestrator) {
 
+    /** Engine Hijri conversion alone, for hosts that only need the date line. */
+    fun hijri(date: LocalDate, offsetDays: Int = 0): com.khushu.engine.calendar.HijriDate =
+        o.engine.calendar.hijri(date, offsetDays)
+
     /** One day where the two libraries meet. */
     data class LocatedDay(
         val gregorian: LocalDate,
