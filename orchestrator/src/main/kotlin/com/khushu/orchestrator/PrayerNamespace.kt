@@ -135,6 +135,15 @@ class PrayerNamespace internal constructor(private val o: KhushuOrchestrator) {
     }
 
     /**
+     * Preparatory fast boundary (a conventional margin before Fajr) from the
+     * cached day's configuration — the host never recomputes it.
+     */
+    suspend fun imsak(key: DayKey, minutesBeforeFajr: Int = 10): Instant? =
+        o.engine.prayer.windows.imsak(
+            key.location, key.date, minutesBeforeFajr, key.settings.prayerConfig,
+        )
+
+    /**
      * Upcoming prayer-entry instants — the pure "when" data for the host's
      * alarm scheduler (orch computes times; the host fires notifications).
      * Reads today's DayModel plus tomorrow's when the schedule crosses
