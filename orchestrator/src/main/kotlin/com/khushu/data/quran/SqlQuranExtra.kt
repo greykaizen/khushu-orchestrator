@@ -130,24 +130,28 @@ class SqlMushafLayoutSource(private val store: SqlStore) {
     ).map { RegistryWord(it.intAt(0) ?: 0, it.intAt(1) ?: 0, it.stringAt(2) ?: "") }
 
     private suspend fun allLines(mushafCode: String): List<PageLine> {
-        // page_info scheme (word-id) keyed by script code
-        val pages = store.query(
+        // Prefer the ayah+word-index `mushaf_map` scheme — QuranApp's source of
+        // truth. The word-id `quran_mushaf_pages` scheme is boundary-broken: it
+        // attributes a surah's first word to the previous page's last line,
+        // orphaning its rosette. Only fall back to it for editions with no map.
+        val mid = store.query("SELECT mushaf_id FROM quran_mushafs WHERE mushaf_code=?", listOf(mushafCode)).firstOrNull()?.stringAt(0)
+        if (mid != null) {
+            val map = store.query(
+                "SELECT page_number, line_number, line_type, is_centered, start_ayah_id, start_word_index, end_ayah_id, end_word_index, surah_no " +
+                    "FROM quran_mushaf_map WHERE mushaf_id=? ORDER BY page_number, line_number", listOf(mid),
+            ).map { PageLine(mushafCode, it.intAt(0) ?: 0, it.intAt(1) ?: 0, LineType.of(it.stringAt(2)),
+                it.stringAt(3) == "1" || it.stringAt(3).equals("true", true),
+                startAyahId = it.intAt(4), startWordIndex = it.intAt(5), endAyahId = it.intAt(6),
+                endWordIndex = it.intAt(7), surahNo = it.intAt(8)) }
+            if (map.isNotEmpty()) return map
+        }
+        // Fallback: page_info scheme (word-id) keyed by script code.
+        return store.query(
             "SELECT page_number, line_number, line_type, is_centered, first_word_id, last_word_id, surah_number " +
                 "FROM quran_mushaf_pages WHERE script=? ORDER BY page_number, line_number", listOf(mushafCode),
         ).map { PageLine(mushafCode, it.intAt(0) ?: 0, it.intAt(1) ?: 0, LineType.of(it.stringAt(2)),
             it.stringAt(3) == "1" || it.stringAt(3).equals("true", true),
             firstWordId = it.intAt(4), lastWordId = it.intAt(5), surahNo = it.intAt(6)) }
-        if (pages.isNotEmpty()) return pages
-        // mushaf_map scheme (ayah+word-index) keyed by numeric mushaf_id
-        val mid = store.query("SELECT id FROM quran_mushafs WHERE mushaf_code=?", listOf(mushafCode)).firstOrNull()?.stringAt(0)
-            ?: return emptyList()
-        return store.query(
-            "SELECT page_number, line_number, line_type, is_centered, start_ayah_id, start_word_index, end_ayah_id, end_word_index, surah_no " +
-                "FROM quran_mushaf_map WHERE mushaf_id=? ORDER BY page_number, line_number", listOf(mid),
-        ).map { PageLine(mushafCode, it.intAt(0) ?: 0, it.intAt(1) ?: 0, LineType.of(it.stringAt(2)),
-            it.stringAt(3) == "1" || it.stringAt(3).equals("true", true),
-            startAyahId = it.intAt(4), startWordIndex = it.intAt(5), endAyahId = it.intAt(6),
-            endWordIndex = it.intAt(7), surahNo = it.intAt(8)) }
     }
 }
 
