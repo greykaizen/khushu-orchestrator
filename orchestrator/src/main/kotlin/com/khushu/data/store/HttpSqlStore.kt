@@ -90,7 +90,10 @@ class HttpSqlStore(
         return when (o["type"]?.jsonPrimitive?.content) {
             "integer" -> o["value"]?.jsonPrimitive?.content?.toLongOrNull()
             "float" -> o["value"]?.jsonPrimitive?.content?.toDoubleOrNull()
-            "blob" -> o["value"]?.jsonPrimitive?.content
+            // Turso answers a BLOB as `{"type":"blob","base64":…}`; reading
+            // `value` (as for scalars) made every remote BLOB a null, so
+            // gzipped timing packs never arrived. Keep `value` as a fallback.
+            "blob" -> (o["base64"] ?: o["value"])?.jsonPrimitive?.content
             "null" -> null
             else -> o["value"]?.jsonPrimitive?.content
         }
@@ -115,6 +118,9 @@ private class HttpRow(override val columns: List<String>, private val v: Map<Str
     override fun longAt(index: Int): Long? = (at(index) as? Number)?.toLong() ?: at(index)?.toString()?.toLongOrNull()
     override fun doubleAt(index: Int): Double? = (at(index) as? Number)?.toDouble() ?: at(index)?.toString()?.toDoubleOrNull()
     override fun anyAt(index: Int): Any? = at(index)
+    override fun bytesAt(index: Int): ByteArray? = (at(index) as? String)?.let { text ->
+        runCatching { java.util.Base64.getDecoder().decode(text) }.getOrNull()
+    }
 }
 
 /** A Turso pipeline error (including a read-only token rejecting a write). */
