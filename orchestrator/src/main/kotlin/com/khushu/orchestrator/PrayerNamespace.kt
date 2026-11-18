@@ -269,8 +269,17 @@ class PrayerNamespace internal constructor(private val o: KhushuOrchestrator) {
      * Reads today's DayModel plus tomorrow's when the schedule crosses
      * midnight. Sorted ascending, first [count] entries at/after [from].
      */
-    suspend fun alarmSchedule(key: DayKey, from: Instant, count: Int): List<AlarmInstant> {
+    suspend fun alarmSchedule(
+        key: DayKey,
+        from: Instant,
+        count: Int,
+        /** User-configured pre-prayer lead; subtracted from each anchor. */
+        leadMinutes: Int = 0,
+        /** Adjusted anchors (per-prayer offsets honoured) by default. */
+        useAdjusted: Boolean = true,
+    ): List<AlarmInstant> {
         require(count in 1..20) { "count must be 1..20" }
+        val lead = Duration.ofMinutes(leadMinutes.coerceIn(0, 120).toLong())
         val out = mutableListOf<AlarmInstant>()
         var date = key.date
         var scanned = 0
@@ -285,8 +294,47 @@ class PrayerNamespace internal constructor(private val o: KhushuOrchestrator) {
                 if (date == key.date) key else key.copy(date = date),
             ).prayerTimes
             for (kind in PrayerOrder) {
-                val raw = times[kind]?.raw ?: continue
-                if (!raw.isBefore(from)) out += AlarmInstant(raw, kind, date)
+                val timing = times[kind] ?: continue
+                val anchor = (if (useAdjusted) (timing.adjusted ?: timing.raw) else timing.raw)
+                    ?: continue
+                val trigger = anchor.minus(lead)
+                if (!trigger.isBefore(from)) out += AlarmInstant(trigger, kind, date)
+            }
+            date = date.plusDays(1)
+        }
+        return out.sortedBy { it.instant }.take(count)
+    }
+
+    /**
+     * Every schedulable occasion (fard, sunrise and voluntary) with the
+     * user's pre-prayer lead already applied. Hosts only decide HOW to place
+     * the alarm — no horizon or Instant arithmetic on their side.
+     */
+    suspend fun occasionAlarms(
+        key: DayKey,
+        from: Instant,
+        count: Int,
+        leadMinutes: Int = 0,
+    ): List<OccasionAlarm> {
+        require(count in 1..40) { "count must be 1..40" }
+        val lead = Duration.ofMinutes(leadMinutes.coerceIn(0, 120).toLong())
+        val out = mutableListOf<OccasionAlarm>()
+        var date = key.date
+        var scanned = 0
+        while (out.size < count) {
+            check(++scanned <= 400) {
+                "occasionAlarms: no computable occasions within 400 days of ${key.date}"
+            }
+            val dayKey = if (date == key.date) key else key.copy(date = date)
+            for (o in o.dayModel(dayKey).occasions) {
+                val instant = o.instant ?: continue
+                val trigger = instant.minus(lead)
+                if (!trigger.isBefore(from)) {
+                    out += OccasionAlarm(
+                        label = o.label, kind = o.kind, instant = trigger,
+                        date = date, category = o.category,
+                    )
+                }
             }
             date = date.plusDays(1)
         }
@@ -295,37 +343,49 @@ class PrayerNamespace internal constructor(private val o: KhushuOrchestrator) {
 
     // ── status derivation (pure, over cached times) ───────────────────────
 
+    /**
+     * Status derives from the SAME adjusted instants the day list and occasions
+     * expose. Previously it used raw times, so a per-prayer offset made the
+     * current/next/countdown disagree with the visible rows. Raw is kept only
+     * as a polar/no-adjustment fallback.
+     */
     private suspend fun deriveStatus(key: DayKey, now: Instant): PrayerStatus {
         val civilDate = java.time.ZonedDateTime.ofInstant(now, key.zoneId).toLocalDate()
         val civilModel = o.dayModel(key.copy(date = civilDate))
-        val fajr = civilModel.prayerTimes.fajr.raw
-        // Chain-extension: `now` beyond this model's chain end (into tomorrow's
-        // fajr→sunrise window) or before its start (yesterday's isha tail) —
-        // derive from the neighbouring day's chain.
+        val fajr = civilModel.prayerTimes.fajr.preferred()
+        val tomorrowFajr = o.dayModel(key.copy(date = civilDate.plusDays(1)))
+            .prayerTimes.fajr.preferred()
+        // Chain-extension: now beyond tomorrow's Fajr (post-Isha), or before
+        // today's Fajr (yesterday's Isha tail) — serve the neighbour's chain.
         return when {
-            civilModel.nextFajr != null && now.isAfter(civilModel.nextFajr) -> {
+            tomorrowFajr != null && now.isAfter(tomorrowFajr) -> {
                 val next = o.dayModel(key.copy(date = civilDate.plusDays(1)))
-                derive(entriesOf(next, next.nextFajr), now)
+                val dayAfterFajr = o.dayModel(key.copy(date = civilDate.plusDays(2)))
+                    .prayerTimes.fajr.preferred()
+                derive(entriesOf(next, dayAfterFajr), now)
             }
             fajr != null && now.isBefore(fajr) -> {
                 val prev = o.dayModel(key.copy(date = civilDate.minusDays(1)))
-                derive(entriesOf(prev, prev.nextFajr), now)
+                derive(entriesOf(prev, fajr), now)
             }
-            else -> derive(entriesOf(civilModel, civilModel.nextFajr), now)
+            else -> derive(entriesOf(civilModel, tomorrowFajr), now)
         }
     }
+
+    private fun com.khushu.engine.prayer.PrayerTiming.preferred(): Instant? =
+        adjusted ?: raw
 
     private fun entriesOf(
         model: DayModel,
         nextFajr: Instant?,
     ): List<Pair<PrayerStatus.Prayer, Instant>> = buildList {
         val t = model.prayerTimes
-        t.fajr.raw?.let { add(PrayerStatus.Prayer.FAJR to it) }
-        t.sunrise.raw?.let { add(PrayerStatus.Prayer.SUNRISE to it) }
-        t.dhuhr.raw?.let { add(PrayerStatus.Prayer.DHUHR to it) }
-        t.asr.raw?.let { add(PrayerStatus.Prayer.ASR to it) }
-        t.maghrib.raw?.let { add(PrayerStatus.Prayer.MAGHRIB to it) }
-        t.isha.raw?.let { add(PrayerStatus.Prayer.ISHA to it) }
+        t.fajr.preferred()?.let { add(PrayerStatus.Prayer.FAJR to it) }
+        t.sunrise.preferred()?.let { add(PrayerStatus.Prayer.SUNRISE to it) }
+        t.dhuhr.preferred()?.let { add(PrayerStatus.Prayer.DHUHR to it) }
+        t.asr.preferred()?.let { add(PrayerStatus.Prayer.ASR to it) }
+        t.maghrib.preferred()?.let { add(PrayerStatus.Prayer.MAGHRIB to it) }
+        t.isha.preferred()?.let { add(PrayerStatus.Prayer.ISHA to it) }
         nextFajr?.let { add(PrayerStatus.Prayer.FAJR to it) }
     }.sortedBy { it.second }
 
@@ -377,6 +437,15 @@ data class PrayerDayOverview(
     val times: com.khushu.engine.prayer.PrayerTimesResult,
     val status: PrayerStatus,
     val nextBoundary: Instant?,
+)
+
+/** One schedulable occasion with pre-prayer lead applied by the orchestrator. */
+data class OccasionAlarm(
+    val label: String,
+    val kind: PrayerStatus.Prayer?,
+    val instant: Instant,
+    val date: LocalDate,
+    val category: PrayerOccasionCategory,
 )
 
 /** One schedulable prayer entry — the pure "when" for host alarm scheduling. */
