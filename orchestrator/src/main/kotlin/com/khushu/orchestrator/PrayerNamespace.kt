@@ -1,10 +1,20 @@
 package com.khushu.orchestrator
 
 import com.khushu.engine.prayer.PrayerStatus
+import com.khushu.orchestrator.config.PrayerEntry
+import com.khushu.orchestrator.config.PrayerOccasionCategory
+import com.khushu.orchestrator.config.PrayerOccurrence
+import com.khushu.orchestrator.config.PrayerFastingFacts
+import com.khushu.orchestrator.config.PrayerForbiddenWindows
+import com.khushu.orchestrator.config.PrayerJumuah
+import com.khushu.orchestrator.config.PrayerLogRecord
+import com.khushu.orchestrator.config.PrayerStreakStats
+import com.khushu.orchestrator.config.PrayerTravelFacts
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.YearMonth
 import java.time.ZonedDateTime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -142,6 +152,116 @@ class PrayerNamespace internal constructor(private val o: KhushuOrchestrator) {
         o.engine.prayer.windows.imsak(
             key.location, key.date, minutesBeforeFajr, key.settings.prayerConfig,
         )
+
+    /**
+     * The full prayer-row list for one day: five obligatory prayers, sunrise
+     * as a boundary event and the voluntary Duha/Tahajjud references, sorted
+     * by instant. Served from the cached DayModel's single computation.
+     */
+    suspend fun occasions(
+        key: DayKey,
+        categories: Set<PrayerOccasionCategory> = PrayerOccasionCategory.entries.toSet(),
+    ): List<PrayerOccurrence> = o.dayModel(key).occasions.filter { it.category in categories }
+
+    /**
+     * Current-first "rotation" around [from]: the in-progress prayer plus the
+     * next [count] - 1 entries, spanning midnight. NOTE: rotation entries are
+     * the six-value enum; use [occasions] when optional rows are needed.
+     */
+    suspend fun upcoming(key: DayKey, from: Instant, count: Int = 5): List<PrayerEntry> =
+        o.engine.prayer.upcoming(key.location, from, key.zoneId, count, key.settings.prayerConfig)
+
+    /** Previous/current/next slice around [now]; same enum limitation as [upcoming]. */
+    suspend fun navigationSequence(
+        key: DayKey,
+        now: Instant,
+        before: Int = 0,
+        after: Int = 1,
+    ): List<PrayerEntry> = o.engine.prayer.navigationSequence(
+        key.location, now, key.zoneId, before, after, key.settings.prayerConfig,
+    )
+
+    /** Next occurrence of one obligatory kind strictly after [after]. */
+    suspend fun nextOccurrenceOf(
+        key: DayKey,
+        kind: PrayerStatus.Prayer,
+        after: Instant,
+    ): PrayerEntry? = o.engine.prayer.nextOccurrenceOf(
+        kind, key.location, after, key.zoneId, key.settings.prayerConfig,
+    )
+
+    /** Tahajjud / Witr window for the night beginning on [key]'s date. */
+    suspend fun tahajjudWindow(key: DayKey) =
+        o.engine.prayer.tahajjudWindow(key.location, key.date, key.settings.prayerConfig)
+
+    /** Night divisions (thirds, midpoint) for [key]'s date. */
+    suspend fun nightDivisions(key: DayKey) =
+        o.engine.prayer.nightDivisions(key.location, key.date, key.settings.prayerConfig)
+
+    /** Times for an inclusive date range — month/table hosts use this. */
+    suspend fun timesForRange(
+        key: DayKey,
+        start: LocalDate,
+        endInclusive: LocalDate,
+    ): List<com.khushu.engine.prayer.PrayerTimesResult> =
+        o.engine.prayer.timesForRange(key.location, start, endInclusive, key.settings.prayerConfig)
+
+    /** Whole civil month of times. */
+    suspend fun month(
+        key: DayKey,
+        yearMonth: YearMonth,
+    ): List<com.khushu.engine.prayer.PrayerTimesResult> =
+        o.engine.prayer.month(key.location, yearMonth, key.settings.prayerConfig)
+
+    suspend fun nextJumuah(key: DayKey, after: Instant): PrayerJumuah? =
+        o.engine.prayer.nextJumuah(key.location, after, key.zoneId)
+
+    /** Ishraq → Dhuhr-entry voluntary window. */
+    suspend fun duha(key: DayKey): ClosedRange<Instant>? =
+        o.engine.prayer.windows.duha(key.location, key.date, key.settings.prayerConfig)
+
+    suspend fun forbidden(
+        key: DayKey,
+        lateAfternoonMarginMinutes: Int = 20,
+    ): PrayerForbiddenWindows =
+        o.engine.prayer.windows.forbidden(
+            key.location, key.date, lateAfternoonMarginMinutes, key.settings.prayerConfig,
+        )
+
+    /** Imsak/fast-start/fast-end composite for the fasting card. */
+    suspend fun fastingFacts(
+        key: DayKey,
+        imsakMinutesBeforeFajr: Int = 10,
+    ): PrayerFastingFacts =
+        o.engine.prayer.windows.fastingFacts(
+            key.location, key.date, imsakMinutesBeforeFajr, key.settings.prayerConfig,
+        )
+
+    suspend fun fastingFactsForMonth(
+        key: DayKey,
+        yearMonth: YearMonth,
+        imsakMinutesBeforeFajr: Int = 10,
+    ): List<PrayerFastingFacts> =
+        o.engine.prayer.windows.fastingFactsForMonth(
+            key.location, yearMonth, imsakMinutesBeforeFajr, key.settings.prayerConfig,
+        )
+
+    suspend fun travelFacts(
+        key: DayKey,
+        travelledDistanceKm: com.khushu.engine.core.units.Kilometers,
+        distanceThresholdKm: Double? = null,
+    ): PrayerTravelFacts =
+        o.engine.prayer.windows.travelFacts(
+            key.location, key.date, travelledDistanceKm, distanceThresholdKm, key.settings.prayerConfig,
+        )
+
+    /** Completion streaks over host-owned logs; excused days are excluded. */
+    suspend fun streak(
+        records: List<PrayerLogRecord>,
+        excusedRanges: List<ClosedRange<LocalDate>> = emptyList(),
+        config: com.khushu.engine.prayer.PrayerConfiguration =
+            com.khushu.engine.prayer.PrayerConfiguration(),
+    ): PrayerStreakStats = o.engine.prayer.stats.streak(records, excusedRanges, config)
 
     /**
      * Upcoming prayer-entry instants — the pure "when" data for the host's

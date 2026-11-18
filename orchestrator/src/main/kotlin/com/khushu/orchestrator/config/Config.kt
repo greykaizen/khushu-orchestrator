@@ -31,6 +31,24 @@ typealias DateLineGregorian = com.khushu.engine.calendar.DateLine.Gregorian
 typealias DateLineRegional = com.khushu.engine.calendar.DateLine.Regional
 typealias CalendarSide = com.khushu.engine.calendar.CalendarConfiguration.Side
 typealias HijriDate = com.khushu.engine.calendar.HijriDate
+
+// ── prayer list ─────────────────────────────────────────────────────────────
+// Nested engine classes each need their OWN top-level alias — Kotlin cannot
+// dereference a nested class through a typealias (see the note above).
+typealias PrayerTimesResult = com.khushu.engine.prayer.PrayerTimesResult
+typealias PrayerStatus = com.khushu.engine.prayer.PrayerStatus
+typealias PrayerKind = com.khushu.engine.prayer.PrayerStatus.Prayer
+typealias PrayerEntry = com.khushu.engine.prayer.Prayer.Entry
+typealias PrayerOccurrence = com.khushu.engine.prayer.Prayer.Occurrence
+typealias PrayerOccasionCategory = com.khushu.engine.prayer.Prayer.OccasionCategory
+typealias PrayerNightDivisions = com.khushu.engine.prayer.Prayer.NightDivisions
+typealias TahajjudWindow = com.khushu.engine.prayer.TahajjudWindow
+typealias PrayerJumuah = com.khushu.engine.prayer.Prayer.Jumuah
+typealias PrayerForbiddenWindows = com.khushu.engine.prayer.Prayer.ForbiddenWindows
+typealias PrayerFastingFacts = com.khushu.engine.prayer.Prayer.FastingFacts
+typealias PrayerTravelFacts = com.khushu.engine.prayer.Prayer.TravelFacts
+typealias PrayerStreakStats = com.khushu.engine.prayer.Prayer.StreakStats
+typealias PrayerLogRecord = com.khushu.engine.prayer.Prayer.PrayerLogRecord
 typealias DualDate = com.khushu.engine.calendar.DualDate
 typealias DualDates = com.khushu.engine.calendar.DualDates
 

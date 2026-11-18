@@ -70,6 +70,13 @@ class DayModel internal constructor(
     val nextFajr: Instant?,
     /** Adaptive sections valid across the whole day (union of slot matches). */
     val allSections: List<AdaptiveDuaSection>,
+    /**
+     * Ordered, category-labeled occasions served from the SAME [prayerTimes]
+     * (5 fard + sunrise + voluntary Duha/Tahajjud). Hosts render a prayer-row
+     * list from this — no second times() computation.
+     */
+    val occasions: List<com.khushu.engine.prayer.Prayer.Occurrence> =
+        com.khushu.engine.prayer.Prayer.occasionsFrom(prayerTimes),
 ) {
     /**
      * Trigger boundaries, sorted ascending: every instant where the correct
