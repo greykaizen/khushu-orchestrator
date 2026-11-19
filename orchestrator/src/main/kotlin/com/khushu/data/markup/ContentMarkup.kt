@@ -16,9 +16,14 @@ sealed interface ContentSpan {
     data class Italic(val children: List<ContentSpan>) : ContentSpan
     data class Superscript(val children: List<ContentSpan>) : ContentSpan
     /** Quran reference: raw inner content, e.g. "2:255" — host resolves to ayah links. */
-    data class QuranRef(val raw: String) : ContentSpan
-    /** Hadith/cross reference: raw inner content — host resolves to hadith links. */
-    data class HadithRef(val raw: String) : ContentSpan
+    data class QuranRef(val raw: String, val id: String? = null) : ContentSpan
+    /**
+     * Hadith/cross reference: raw inner content plus the target hadith id from
+     * the `id` attribute (e.g. `<ref id="bukhari_urn_101830">Hadith 183</ref>`).
+     * The id is the corpus primary key, so the host can resolve it directly.
+     * Null when the markup carried no id — never invent a link.
+     */
+    data class HadithRef(val raw: String, val id: String? = null) : ContentSpan
 }
 
 object ContentMarkup {
@@ -29,6 +34,9 @@ object ContentMarkup {
         stack.addLast(root)
 
         val tagRe = Regex("<(/?)(br|b|i|sup|qref|ref)[^>]*/?>", RegexOption.IGNORE_CASE)
+        // The opening tag's id attribute is the reference target. Quoted and
+        // unquoted values are both accepted; unknown tags still pass through.
+        val refIdRe = Regex("""\bid\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""", RegexOption.IGNORE_CASE)
         var cursor = 0
 
         while (cursor < text.length) {
@@ -55,9 +63,12 @@ object ContentMarkup {
                         cursor = openEnd
                     } else {
                         val inner = text.substring(openEnd, close.range.first)
+                        val id = refIdRe.find(m.value)?.let { a ->
+                            a.groupValues[1].ifEmpty { a.groupValues[2] }.ifEmpty { a.groupValues[3] }
+                        }?.takeIf { it.isNotEmpty() }
                         stack.last().add(
-                            if (name == "qref") ContentSpan.QuranRef(inner)
-                            else ContentSpan.HadithRef(inner),
+                            if (name == "qref") ContentSpan.QuranRef(inner, id)
+                            else ContentSpan.HadithRef(inner, id),
                         )
                         cursor = close.range.last + 1
                     }

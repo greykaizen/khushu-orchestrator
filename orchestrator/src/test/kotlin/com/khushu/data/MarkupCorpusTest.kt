@@ -68,4 +68,25 @@ class MarkupCorpusTest {
         assertTrue(plain.contains("bold nested"))
         assertTrue(!plain.contains("<b>"))
     }
+
+    @Test
+    fun referenceIdIsPreservedAndUnknownTagsStayLiteral() {
+        val spans = ContentMarkup.parse(
+            "See <ref id=\"bukhari_urn_101830\">Hadith 183</ref> and <qref>2:255</qref>. " +
+                "Unknown <span class=\"x\">tag</span> stays."
+        )
+        val ref = spans.filterIsInstance<ContentSpan.HadithRef>().single()
+        assertTrue(ref.raw == "Hadith 183", "inner text preserved")
+        assertTrue(ref.id == "bukhari_urn_101830", "target id preserved")
+        assertTrue(spans.any { it is ContentSpan.QuranRef && it.raw == "2:255" && it.id == null })
+        val plain = ContentMarkup.plainText(spans)
+        assertTrue(plain.contains("""<span class="x">tag</span>"""), "unknown tags pass through literally")
+        assertTrue(!plain.contains("<ref") && !plain.contains("</ref>"))
+    }
+
+    @Test
+    fun unquotedReferenceIdIsPreserved() {
+        val spans = ContentMarkup.parse("<ref id=bukhari_urn_1>Hadith 1</ref>")
+        assertTrue(spans.filterIsInstance<ContentSpan.HadithRef>().single().id == "bukhari_urn_1")
+    }
 }
