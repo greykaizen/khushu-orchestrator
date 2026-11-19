@@ -79,3 +79,21 @@ typealias PrayerInstance = com.khushu.engine.prayer.Qada.PrayerInstance
 typealias BoundaryRuling = com.khushu.engine.prayer.Qada.BoundaryRuling
 typealias QadaReport = com.khushu.engine.prayer.Qada.QadaReport
 typealias DaySchedule = com.khushu.engine.prayer.Qada.DaySchedule
+
+// ── observance (bookmarks + reading stats) ─────────────────────────────────
+// The host persists bookmarks/sessions; these are the inert data carriers the
+// `orch.observance` namespace computes over. Host code imports them from here,
+// never from com.khushu.engine.* (AGENTS #11: orchestrator is the only surface).
+typealias Bookmark = com.khushu.engine.observance.Bookmark
+typealias BookmarkDomain = com.khushu.engine.observance.BookmarkDomain
+typealias BookmarkViews = com.khushu.engine.observance.BookmarkViews
+typealias ReadingSession = com.khushu.engine.observance.ReadingSession
+typealias ReadingDomain = com.khushu.engine.observance.ReadingDomain
+typealias ReadingTarget = com.khushu.engine.observance.ReadingTarget
+typealias ReadStats = com.khushu.engine.observance.ReadStats
+typealias DomainReadStats = com.khushu.engine.observance.DomainReadStats
+typealias ReadingHistory = com.khushu.engine.observance.ReadingHistory
+typealias HistoryWindow = com.khushu.engine.observance.HistoryWindow
+typealias KhatmFacts = com.khushu.engine.observance.KhatmFacts
+typealias AyahRange = com.khushu.engine.observance.AyahRange
+typealias JuzRange = com.khushu.engine.observance.JuzRange

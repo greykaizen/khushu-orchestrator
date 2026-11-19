@@ -221,6 +221,9 @@ class KhushuOrchestrator(
     /** Offline hadith corpora lifecycle (attach → search/books) — see [SunnahNamespace]. */
     val sunnah = SunnahNamespace(this)
 
+    /** Centralized bookmarks + reading stats — see [ObservanceNamespace]. */
+    val observance = ObservanceNamespace(this)
+
     /**
      * Release SQLite connections and any closeable data-layer state on process
      * teardown. The data layer's close runs ON the single SQLite thread — an
