@@ -15,7 +15,7 @@ dependencies {
     // Composition + serving layer: engine is the only family dependency left.
     // `api` because public signatures expose engine types directly; the
     // content-retrieval code (com.khushu.data.*) lives in THIS artifact.
-    api("com.github.greykaizen.khushu-engine:engine-facade:2.0.1")
+    api("com.github.greykaizen.khushu-engine:engine-facade:2.0.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
     implementation("com.squareup.okio:okio:3.9.0")
