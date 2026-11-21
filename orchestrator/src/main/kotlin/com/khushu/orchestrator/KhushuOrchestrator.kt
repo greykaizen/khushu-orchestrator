@@ -209,6 +209,8 @@ class KhushuOrchestrator(
     val prayer = PrayerNamespace(this)
     val qada = QadaNamespace(this)
     val qibla = QiblaNamespace(this)
+    /** Ephemeris facts for sky/AR views — positions, day events, tracks. */
+    val astronomy = AstronomyNamespace(this)
     val calendar = CalendarNamespace(this)
     val mushaf = MushafNamespace(this)
 

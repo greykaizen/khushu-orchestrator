@@ -67,6 +67,23 @@ typealias QiblaBearing = com.khushu.engine.qibla.QiblaBearing
 typealias BearingAndDistance = com.khushu.engine.qibla.BearingAndDistance
 typealias SunQiblaRelation = com.khushu.engine.qibla.SunQiblaRelation
 
+// ── astronomy (solar/lunar positions, tracks, day events) ──────────────────
+typealias SolarPosition = com.khushu.engine.astronomy.SolarPosition
+typealias LunarPosition = com.khushu.engine.astronomy.LunarPosition
+typealias MoonState = com.khushu.engine.astronomy.MoonState
+typealias RiseSet = com.khushu.engine.astronomy.RiseSet
+typealias SolarEvent = com.khushu.engine.astronomy.SolarEvent
+typealias SolarEventType = com.khushu.engine.astronomy.SolarEventType
+typealias SolarEvents = com.khushu.engine.astronomy.SolarEvents
+typealias SolarDayPhases = com.khushu.engine.astronomy.SolarDayPhases
+typealias SolarDayTrack = com.khushu.engine.astronomy.SolarDayTrack
+typealias SunTrack = com.khushu.engine.astronomy.SunTrack
+typealias CelestialPathPoint = com.khushu.engine.astronomy.CelestialPathPoint
+typealias DayMoon = com.khushu.engine.astronomy.DayMoon
+typealias MonthlyMoonTrack = com.khushu.engine.astronomy.MonthlyMoonTrack
+typealias AltitudeConventions = com.khushu.engine.astronomy.AltitudeConventions
+typealias Seasons = com.khushu.engine.astronomy.Seasons
+
 // ── qada (excused-range) configuration + results ───────────────────────────
 // Qada's types are nested inside `object Qada`; Kotlin cannot dereference a
 // nested class through a typealias, so each gets its own top-level alias.
