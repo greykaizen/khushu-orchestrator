@@ -86,39 +86,40 @@ class SimilarVersesSource(
         out
     }
 
-    suspend fun phrases(): List<MutashabihatPhrase> = phrases ?: run {
-        val root = json.parseToJsonElement(fetcher.fetch("$baseDir/mutashabihat.json").decodeToString()).jsonObject
-        val out = root["phrases"]!!.jsonArray.map { el ->
-            val a = el.jsonArray
-            MutashabihatPhrase(a[0].jsonPrimitive.int, a[1].jsonPrimitive.int, a[2].jsonPrimitive.int,
-                a[3].jsonPrimitive.int, a[4].jsonPrimitive.int, a[5].jsonPrimitive.int, a[6].jsonPrimitive.int)
+    /** phrases() and occurrences() need the SAME bundle — parse it once. */
+    private var mutashabihat: Pair<List<MutashabihatPhrase>, Map<Int, List<MutashabihatOccurrence>>>? = null
+
+    private suspend fun mutashabihat(): Pair<List<MutashabihatPhrase>, Map<Int, List<MutashabihatOccurrence>>> =
+        mutashabihat ?: run {
+            val root = json.parseToJsonElement(fetcher.fetch("$baseDir/mutashabihat.json").decodeToString()).jsonObject
+            val phraseList = root["phrases"]!!.jsonArray.map { el ->
+                val a = el.jsonArray
+                MutashabihatPhrase(a[0].jsonPrimitive.int, a[1].jsonPrimitive.int, a[2].jsonPrimitive.int,
+                    a[3].jsonPrimitive.int, a[4].jsonPrimitive.int, a[5].jsonPrimitive.int, a[6].jsonPrimitive.int)
+            }
+            val occurrenceMap = root["occurrences"]!!.jsonObject.mapValues { (_, arr) ->
+                arr.jsonArray.map { el ->
+                    val a = el.jsonArray
+                    MutashabihatOccurrence(
+                        ayahId = a[0].jsonPrimitive.int,
+                        wordRanges = a[1].jsonArray.map { r ->
+                            val p = r.jsonArray
+                            p[0].jsonPrimitive.int to p[1].jsonPrimitive.int
+                        },
+                        inAyahOrder = a[2].jsonPrimitive.int,
+                    )
+                }
+            }.mapKeys { it.key.toInt() }
+            (phraseList to occurrenceMap).also { mutashabihat = it }
         }
-        phrases = out
-        out
-    }
+
+    suspend fun phrases(): List<MutashabihatPhrase> = mutashabihat().first
 
     suspend fun phrase(id: Int): MutashabihatPhrase? = phrases().firstOrNull { it.phraseId == id }
 
     suspend fun occurrencesOf(phraseId: Int): List<MutashabihatOccurrence> = occ()[phraseId] ?: emptyList()
 
-    private suspend fun occ(): Map<Int, List<MutashabihatOccurrence>> = occurrences ?: run {
-        val root = json.parseToJsonElement(fetcher.fetch("$baseDir/mutashabihat.json").decodeToString()).jsonObject
-        val out = root["occurrences"]!!.jsonObject.mapValues { (_, arr) ->
-            arr.jsonArray.map { el ->
-                val a = el.jsonArray
-                MutashabihatOccurrence(
-                    ayahId = a[0].jsonPrimitive.int,
-                    wordRanges = a[1].jsonArray.map { r ->
-                        val p = r.jsonArray
-                        p[0].jsonPrimitive.int to p[1].jsonPrimitive.int
-                    },
-                    inAyahOrder = a[2].jsonPrimitive.int,
-                )
-            }
-        }.mapKeys { it.key.toInt() }
-        occurrences = out
-        out
-    }
+    private suspend fun occ(): Map<Int, List<MutashabihatOccurrence>> = mutashabihat().second
 }
 
 /** Reads `inventory/topics/topics.json` (taxonomy + ayah links + relations). */

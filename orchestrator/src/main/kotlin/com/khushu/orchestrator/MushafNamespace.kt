@@ -4,6 +4,7 @@ import com.khushu.data.model.LineType
 import com.khushu.data.repo.KhushuContent
 import kotlin.math.max
 import kotlinx.coroutines.sync.Mutex
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.sync.withLock
 
 /**
@@ -56,7 +57,7 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
     }
 
     private val assetsMutex = Mutex()
-    private val assets = HashMap<String, BundleAssets>()
+    private val assets = ConcurrentHashMap<String, BundleAssets>()
 
     private suspend fun bundleAssets(bundleId: String, sizeLabel: String): BundleAssets {
         val key = "$bundleId|$sizeLabel"
@@ -269,7 +270,12 @@ class MushafNamespace internal constructor(private val o: KhushuOrchestrator) {
         val first = line.firstWordId ?: return MushafLine.Text(lineNumber, centered, emptyList(), 0.0)
         val last = line.lastWordId ?: first
         // 1-based running word order → registry slice.
-        val words = a.registry.drop((first - 1).coerceAtLeast(0)).take(max(0, last - first + 1))
+        // The old drop() copied the entire remaining registry (~77k entries)
+        // for every page line; walk the slice by index instead (no allocation).
+        val from = (first - 1).coerceAtLeast(0)
+        val to = from + max(0, last - first + 1)
+        val words = ArrayList<com.khushu.data.model.RegistryWord>(to - from)
+        for (i in from until minOf(to, a.registry.size)) words += a.registry[i]
         var widthFu = 0.0
         var unresolved = 0
         val positioned = words.mapIndexed { idx, w ->

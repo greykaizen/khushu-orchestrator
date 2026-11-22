@@ -433,9 +433,18 @@ class MushafLayoutSource(
     private val json = Json { ignoreUnknownKeys = true }
     private val lineCache = HashMap<String, List<PageLine>>()
     private val wordsCache = HashMap<String, List<RegistryWord>>()
+    /** ayahId -> (first,last) word-index range; built once per script (~77k words). */
+    private val ayahRangeCache = HashMap<String, Map<Int, Pair<Int, Int>>>()
+    /** pageNumber -> lines; built once per mushaf (~9k lines) instead of filtering per page. */
+    private val pageLinesCache = HashMap<String, Map<Int, List<PageLine>>>()
 
     suspend fun pageLines(mushafCode: String, pageNumber: Int): List<PageLine> =
-        allLines(mushafCode).filter { it.pageNumber == pageNumber }
+        pageLinesIndex(mushafCode)[pageNumber].orEmpty()
+
+    private suspend fun pageLinesIndex(mushafCode: String): Map<Int, List<PageLine>> =
+        pageLinesCache[mushafCode] ?: allLines(mushafCode)
+            .groupBy { it.pageNumber }
+            .also { pageLinesCache[mushafCode] = it }
 
     suspend fun linesOfAyah(mushafCode: String, surahNo: Int, ayahNo: Int): List<PageLine> {
         val ayahId = surahNo * 1000 + ayahNo
@@ -446,20 +455,33 @@ class MushafLayoutSource(
             }
         }.ifEmpty {
             // page_info-addressed mushafs: resolve via word registry
-            val words = words(mushafScriptOf(mushafCode))
-            val first = words.indexOfFirst { it.ayahId == ayahId }
-            if (first < 0) return emptyList()
-            val last = words.indexOfLast { it.ayahId == ayahId }
+            val script = mushafScriptOf(mushafCode)
+            val range = ayahWordRanges(script)[ayahId] ?: return emptyList()
+            val first = range.first
+            val last = range.second
             allLines(mushafCode).filter { l ->
                 val f = l.firstWordId ?: return@filter false
                 val t = l.lastWordId ?: return@filter false
-                f <= last + 1 && t >= first + 1
+                f <= last && t >= first
             }
         }
     }
 
     suspend fun pageOfAyah(mushafCode: String, surahNo: Int, ayahNo: Int): Int? =
         linesOfAyah(mushafCode, surahNo, ayahNo).minOfOrNull { it.pageNumber }
+
+    /** ayahId -> (first, last) word index, one O(n) pass per script. */
+    private suspend fun ayahWordRanges(scriptCode: String): Map<Int, Pair<Int, Int>> =
+        ayahRangeCache[scriptCode] ?: run {
+            val out = HashMap<Int, Pair<Int, Int>>()
+            words(scriptCode).forEachIndexed { index, w ->
+                val i = index + 1 // registry word indices are 1-based
+                val cur = out[w.ayahId]
+                out[w.ayahId] = if (cur == null) i to i else cur.first to i
+            }
+            ayahRangeCache[scriptCode] = out
+            out
+        }
 
     /** Canonical word registry of the script a mushaf renders (ayah order). */
     suspend fun words(scriptCode: String): List<RegistryWord> = wordsCache[scriptCode] ?: run {
@@ -477,6 +499,8 @@ class MushafLayoutSource(
     fun clearCache() {
         lineCache.clear()
         wordsCache.clear()
+        ayahRangeCache.clear()
+        pageLinesCache.clear()
     }
 
     /** qpc renders uthmani text; indopak_* render dk_indopak; per donor script wiring. */

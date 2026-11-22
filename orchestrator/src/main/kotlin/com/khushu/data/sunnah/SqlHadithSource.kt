@@ -44,22 +44,32 @@ class SqlHadithSource(private val collection: String, private val store: SqlStor
         )
     }
 
-    suspend fun books(lang: String): List<Book> = store.query(
-        "SELECT id,number FROM ${t("books")} ORDER BY CAST(number AS INTEGER)",
-    ).mapNotNull { b ->
-        val id = b.stringAt(0) ?: return@mapNotNull null
-        val title = store.query("SELECT title FROM ${t("book_translations")} WHERE book_id=? AND lang=? LIMIT 1", listOf(id, lang))
-            .firstOrNull()?.stringAt(0)
-        Book(id = id, collectionId = collection, number = b.stringAt(1) ?: "", title = title, intro = null, preamble = null, notes = null)
+    suspend fun books(lang: String): List<Book> {
+        // One query for the whole collection (was one per book: 97 round-trips
+        // for Bukhari alone — remote Turso bills per query).
+        val titles = store.query(
+            "SELECT book_id,title FROM ${t("book_translations")} WHERE lang=?", listOf(lang),
+        ).associate { it.stringAt(0) to it.stringAt(1) }
+        return store.query(
+            "SELECT id,number FROM ${t("books")} ORDER BY CAST(number AS INTEGER)",
+        ).mapNotNull { b ->
+            val id = b.stringAt(0) ?: return@mapNotNull null
+            Book(id = id, collectionId = collection, number = b.stringAt(1) ?: "", title = titles[id],
+                intro = null, preamble = null, notes = null)
+        }
     }
 
-    suspend fun chapters(bookId: String, lang: String): List<Chapter> = store.query(
-        "SELECT id,number FROM ${t("chapters")} WHERE book_id=? ORDER BY CAST(number AS INTEGER)", listOf(bookId),
-    ).map { c ->
-        val id = c.stringAt(0) ?: ""
-        val title = store.query("SELECT title FROM ${t("chapter_translations")} WHERE chapter_id=? AND lang=? LIMIT 1", listOf(id, lang))
-            .firstOrNull()?.stringAt(0)
-        Chapter(id = id, collectionId = collection, bookId = bookId, number = c.stringAt(1) ?: "", title = title)
+    suspend fun chapters(bookId: String, lang: String): List<Chapter> {
+        // Same shape as books(): one translation scan, not one query per row.
+        val titles = store.query(
+            "SELECT chapter_id,title FROM ${t("chapter_translations")} WHERE lang=?", listOf(lang),
+        ).associate { it.stringAt(0) to it.stringAt(1) }
+        return store.query(
+            "SELECT id,number FROM ${t("chapters")} WHERE book_id=? ORDER BY CAST(number AS INTEGER)", listOf(bookId),
+        ).map { c ->
+            val id = c.stringAt(0) ?: ""
+            Chapter(id = id, collectionId = collection, bookId = bookId, number = c.stringAt(1) ?: "", title = titles[id])
+        }
     }
 
     suspend fun hadithIdsForBook(bookId: String, limit: Int = 50, offset: Int = 0): List<String> = store.query(

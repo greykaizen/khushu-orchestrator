@@ -1147,14 +1147,26 @@ class IslamicEventsApi internal constructor(
 ) {
     private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
     private var cache: List<IslamicEventEntry>? = null
-    /** SQL-backed source when the host resolves `content`; else null → JSON. */
-    private val sqlSource: SqlEventsSource? =
-        kotlinx.coroutines.runBlocking { resolver?.resolve("content") }?.let { SqlEventsSource(it) }
+    /**
+     * SQL-backed source when the host resolves `content`; else null → JSON.
+     * Resolved lazily on first SUSPENDING use — the old runBlocking in a field
+     * initializer blocked whichever thread constructed the API (Main in hosts).
+     */
+    private var sqlSource: SqlEventsSource? = null
+    private var sqlResolved = false
     private val jsonFetcher: ContentFetcher? = fetcher
+
+    private suspend fun resolvedSqlSource(): SqlEventsSource? {
+        if (!sqlResolved) {
+            sqlSource = resolver?.resolve("content")?.let { SqlEventsSource(it) }
+            sqlResolved = true
+        }
+        return sqlSource
+    }
 
     /** All event entries (title/category/hijri anchors/source/confidence). */
     suspend fun all(): List<IslamicEventEntry> =
-        sqlSource?.all() ?: jsonAll()
+        resolvedSqlSource()?.all() ?: jsonAll()
 
     private suspend fun jsonAll(): List<IslamicEventEntry> = cache ?: run {
         val root = json.parseToJsonElement(

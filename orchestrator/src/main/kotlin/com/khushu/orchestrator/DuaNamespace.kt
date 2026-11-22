@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Prayer ↔ content adaptive composite: engine prayer facts → data-api dua
@@ -86,7 +85,7 @@ class DuaNamespace internal constructor(private val o: KhushuOrchestrator) {
                     else -> (java.time.Duration.between(now, boundary).toMillis() / timeScale)
                         .toLong().coerceIn(50L, (maxWait.toMillis() / timeScale).toLong())
                 }
-                withTimeoutOrNull(waitMs) { delay(Long.MAX_VALUE) }
+                delay(waitMs)
                 now = nowNow()
                 // Day rollover → new semantic key (new day, fresh plan).
                 val zoneNow = java.time.ZonedDateTime.ofInstant(now, currentKey.zoneId)

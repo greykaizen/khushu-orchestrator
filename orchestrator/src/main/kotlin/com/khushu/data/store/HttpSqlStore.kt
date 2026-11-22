@@ -1,5 +1,7 @@
 package com.khushu.data.store
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -32,10 +34,11 @@ class HttpSqlStore(
 
     private val pipelineUrl = endpointUrl.trimEnd('/') + "/v2/pipeline"
 
-    override suspend fun query(sql: String, args: List<Any?>): List<Row> {
+    /** Blocking HTTP must never run on the caller's (potentially Main) thread. */
+    override suspend fun query(sql: String, args: List<Any?>): List<Row> = withContext(Dispatchers.IO) {
         val body = buildRequest(sql, args)
         val text = post(pipelineUrl, body)
-        return parse(text)
+        parse(text)
     }
 
     // ── request ──────────────────────────────────────────────────────────────

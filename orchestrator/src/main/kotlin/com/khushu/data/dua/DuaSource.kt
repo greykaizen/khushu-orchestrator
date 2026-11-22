@@ -6,6 +6,8 @@ import com.khushu.data.model.DuaArticleCategory
 import com.khushu.data.model.DuaArticleInfo
 import com.khushu.data.model.DuaCategory
 import com.khushu.data.transport.ContentFetcher
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -23,7 +25,10 @@ class DuaSource(
     private val baseDir: String = "assets/dua_dhikr",
 ) {
     private val json = Json { ignoreUnknownKeys = true }
-    @Volatile private var duasCache: List<Dua>? = null
+    /** One parse of the 491-dua corpus; [byId] makes dua(id) O(1) instead of O(491). */
+    private data class DuaIndex(val list: List<Dua>, val byId: Map<Int, Dua>)
+    @Volatile private var duaIndex: DuaIndex? = null
+    private val duaMutex = Mutex()
     @Volatile private var categoriesCache: List<DuaCategory>? = null
     @Volatile private var articleIndexCache: List<DuaArticleCategory>? = null
 
@@ -35,10 +40,15 @@ class DuaSource(
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, ByteArray>) = size > 4
     }
 
-    /** All 491 duas (cached). Filter client-side, or use [bySubcategory]. */
-    suspend fun duas(): List<Dua> = duasCache ?: run {
+    /**
+     * All 491 duas. The old check-then-act `@Volatile` cache let two concurrent
+     * first calls each parse the whole JSON blob; the mutex makes the parse a
+     * single one-time event and publishes the list + id index together.
+     */
+    private suspend fun corpus(): DuaIndex = duaIndex ?: duaMutex.withLock {
+        duaIndex?.let { return@withLock it }
         val arr = json.parseToJsonElement(fetcher.fetch("$baseDir/dua_data.json").decodeToString()).jsonArray
-        val out = arr.map { el ->
+        val list = arr.map { el ->
             val o = el.jsonObject
             Dua(
                 id = o["id"]!!.jsonPrimitive.int,
@@ -57,11 +67,14 @@ class DuaSource(
                 reference = o["reference"]?.let { if (it.jsonPrimitive.isString) it.jsonPrimitive.content else null },
             )
         }
-        duasCache = out
-        out
+        DuaIndex(list, list.associateBy { it.id }).also { duaIndex = it }
     }
 
-    suspend fun dua(id: Int): Dua? = duas().firstOrNull { it.id == id }
+    /** All 491 duas (parsed once). Filter client-side, or use [bySubcategory]. */
+    suspend fun duas(): List<Dua> = corpus().list
+
+    /** O(1) lookup by id — localAudioPath/audio call this for every recitation. */
+    suspend fun dua(id: Int): Dua? = corpus().byId[id]
 
     /** Subcategory groups derived from the corpus (30: 12 main + 18 other). */
     suspend fun categories(): List<DuaCategory> = categoriesCache ?: run {

@@ -12,6 +12,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -140,30 +141,44 @@ class DayModel internal constructor(
 internal class DayModelCache(private val capacity: Int = 4) {
     private val mutex = Mutex()
     private val map = LinkedHashMap<DayKey, DayModel>(capacity, 0.75f, true)
+    /**
+     * One in-flight build per KEY. The old code held [mutex] across the whole
+     * suspending build, so a cold status call (3–4 neighbour days) built them
+     * strictly serially — corpus I/O + engine math all queued behind one lock.
+     * Now different days build concurrently; same-key callers share one build.
+     */
+    private val inFlight = HashMap<DayKey, CompletableDeferred<DayModel>>()
 
-    /** Non-building lookup — null when absent. Suspend: shares the build mutex. */
+    /** Non-building lookup — null when absent. */
     suspend fun peek(key: DayKey): DayModel? = mutex.withLock { map[key] }
 
-    suspend fun get(key: DayKey, build: suspend (DayKey) -> DayModel): DayModel =
-        mutex.withLock {
-            map[key]?.let { return it }
-            val model = build(key)
-            map[key] = model
-            while (map.size > capacity) {
-                map.remove(map.keys.first())
-            }
-            model
+    suspend fun get(key: DayKey, build: suspend (DayKey) -> DayModel): DayModel {
+        mutex.withLock { map[key]?.let { return it } }
+        val (deferred, owner) = mutex.withLock {
+            inFlight[key]?.let { return@withLock it to false }
+            CompletableDeferred<DayModel>().also { inFlight[key] = it } to true
         }
-
-    suspend fun clear() {
-        // v1.4.2: actually under the mutex — the old comment claimed it was.
-        mutex.withLock { map.clear() }
+        if (!owner) return deferred.await()
+        return try {
+            val model = build(key)
+            mutex.withLock {
+                map[key] = model
+                while (map.size > capacity) map.remove(map.keys.first())
+            }
+            deferred.complete(model)
+            model
+        } catch (t: Throwable) {
+            deferred.completeExceptionally(t)
+            throw t
+        } finally {
+            mutex.withLock { inFlight.remove(key) }
+        }
     }
+
+    suspend fun clear() = mutex.withLock { map.clear() }
 
     /** Drop one day's plan only — forceRecompute no longer nukes the whole LRU. */
-    suspend fun invalidate(key: DayKey) {
-        mutex.withLock { map.remove(key) }
-    }
+    suspend fun invalidate(key: DayKey) = mutex.withLock { map.remove(key) }
 }
 
 /**
@@ -268,12 +283,21 @@ class KhushuOrchestrator(
         mushafBundle?.let { bundleSpec -> mushaf.prefetchPages(bundleSpec.first, bundleSpec.second, mushafPages) }
     }
 
+    /** The 491-dua slug index is corpus-wide, not per-day — build it once. */
+    @Volatile private var duaSlugIndex: Map<String, List<com.khushu.data.model.Dua>>? = null
+    private val slugMutex = Mutex()
+
+    private suspend fun duaSlugIndex(): Map<String, List<com.khushu.data.model.Dua>> =
+        duaSlugIndex ?: slugMutex.withLock {
+            duaSlugIndex?.let { return@withLock it }
+            val out = HashMap<String, MutableList<com.khushu.data.model.Dua>>()
+            for (d in data.dua.duas()) out.getOrPut(d.subcategory) { mutableListOf() }.add(d)
+            out.also { duaSlugIndex = it }
+        }
+
     private suspend fun build(key: DayKey): DayModel {
-        // Slug-index the corpus once per build: every probe-point evaluation
-        // below reads pre-grouped lists (O(1) per slot) instead of re-filtering
-        // the 491-dua corpus.
-        val bySlug = HashMap<String, MutableList<com.khushu.data.model.Dua>>()
-        for (d in data.dua.duas()) bySlug.getOrPut(d.subcategory) { mutableListOf() }.add(d)
+        // O(1) slug lookups per probe; the index is built once per process.
+        val bySlug = duaSlugIndex()
 
         val times = engine.prayer.times(
             key.location, key.date, key.settings.prayerConfig,

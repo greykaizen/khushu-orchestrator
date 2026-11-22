@@ -28,19 +28,22 @@ sealed interface ContentSpan {
 
 object ContentMarkup {
 
+    // Compiled ONCE. The old parser built 2–3 Regex per block; over the 301 MB
+    // hadith index build that is hundreds of thousands of compilations.
+    private val TAG_RE = Regex("<(/?)(br|b|i|sup|qref|ref)[^>]*/?>", RegexOption.IGNORE_CASE)
+    private val REF_ID_RE = Regex("""\bid\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""", RegexOption.IGNORE_CASE)
+    private val QREF_CLOSE_RE = Regex("</qref\\s*>", RegexOption.IGNORE_CASE)
+    private val REF_CLOSE_RE = Regex("</ref\\s*>", RegexOption.IGNORE_CASE)
+
     fun parse(text: String): List<ContentSpan> {
         val root = mutableListOf<ContentSpan>()
         val stack = ArrayDeque<MutableList<ContentSpan>>()
         stack.addLast(root)
 
-        val tagRe = Regex("<(/?)(br|b|i|sup|qref|ref)[^>]*/?>", RegexOption.IGNORE_CASE)
-        // The opening tag's id attribute is the reference target. Quoted and
-        // unquoted values are both accepted; unknown tags still pass through.
-        val refIdRe = Regex("""\bid\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""", RegexOption.IGNORE_CASE)
         var cursor = 0
 
         while (cursor < text.length) {
-            val m = tagRe.find(text, cursor)
+            val m = TAG_RE.find(text, cursor)
             if (m == null) {
                 val tail = text.substring(cursor)
                 if (tail.isNotEmpty()) stack.last().add(ContentSpan.Text(tail))
@@ -63,7 +66,7 @@ object ContentMarkup {
                         cursor = openEnd
                     } else {
                         val inner = text.substring(openEnd, close.range.first)
-                        val id = refIdRe.find(m.value)?.let { a ->
+                        val id = REF_ID_RE.find(m.value)?.let { a ->
                             a.groupValues[1].ifEmpty { a.groupValues[2] }.ifEmpty { a.groupValues[3] }
                         }?.takeIf { it.isNotEmpty() }
                         stack.last().add(
