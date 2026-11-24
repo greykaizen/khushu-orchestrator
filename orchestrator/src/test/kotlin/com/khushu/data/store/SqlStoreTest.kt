@@ -42,9 +42,10 @@ class SqlStoreTest {
         }
     }
 
-    @Test fun translationContentlessFtsAndRowidJoin() = runTest {
-        assumeTrue(havePacks, "khushu-data-api/data/packs not present")
-        JdbcSqlStore(File(packsRoot, "translation-en_saheeh-international.db")).use { s ->
+    @Test    fun translationContentlessFtsAndRowidJoin() = runTest {
+        val pack = File(packsRoot, "translation-en_saheeh-international.db")
+        assumeTrue(havePacks && pack.length() > 0, "translation pack not present")
+        JdbcSqlStore(pack).use { s ->
             // contentless fts: COUNT works, columns are not selectable
             assertEquals(172, s.queryOne("SELECT COUNT(*) AS n FROM translation_fts WHERE translation_fts MATCH ?", listOf("merciful"))!!.long("n"))
             // the app's actual pattern: join back to the base table by rowid
@@ -96,9 +97,11 @@ class SqlStoreTest {
      * without labels); label access is the ergonomic default derived from [Row.columns].
      * Both must agree for every store implementation.
      */
-    @Test fun rowsExposePositionalAndLabelledAccessConsistently() = runTest {
+    @Test    fun rowsExposePositionalAndLabelledAccessConsistently() = runTest {
+        val content = File(packsRoot, "content.db")
+        assumeTrue(havePacks && content.isFile, "content pack not present")
         // JDBC (has labels; positional must agree)
-        JdbcSqlStore(File(packsRoot, "content.db")).use { s ->
+        JdbcSqlStore(content).use { s ->
             val r = s.queryOne("SELECT id, name FROM names_names WHERE id=(SELECT MIN(id) FROM names_names)")!!
             assertEquals(1L, r.longAt(0)); assertEquals(1L, r.long("id"))
             assertNotNull(r.stringAt(1)); assertEquals(r.stringAt(1), r.string("name"))

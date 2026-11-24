@@ -6,6 +6,7 @@ import com.khushu.data.store.SqlStoreResolver
 import com.khushu.data.transport.ContentFetcher
 import com.khushu.data.transport.ContentMissingException
 import java.io.File
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -24,31 +25,34 @@ class QuranLayoutResolverTest {
         throw ContentMissingException(path)
     }
 
-    private val quranPack: File =
+    private val quranPack: File? =
         generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
             .firstOrNull { File(it, "data/packs/quran-core.db").exists() }
             ?: generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
                 .firstOrNull { File(it, "khushu-data-api/data/packs/quran-core.db").exists() }
                 ?.let { File(it, "khushu-data-api/data/packs/quran-core.db") }
-            ?: error("quran-core pack not found (khushu-data-api sibling checkout required)")
 
     /** Repo root with the atlas bundle (same discovery pattern as the dua tests). */
-    private val repoRoot: File =
+    private val repoRoot: File? =
         generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
             .firstOrNull { File(it, "data/assets/atlas/uthmani/6x.zip").exists() }
             ?: generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
                 .firstOrNull { File(it, "khushu-data-api/data/assets/atlas/uthmani/6x.zip").exists() }
                 ?.let { File(it, "khushu-data-api") }
-            ?: error("khushu-data-api repo root not found")
+
+    private val haveQuranPack: Boolean get() = quranPack?.isFile == true
 
     private fun content(atlasFetcher: ContentFetcher? = null) = KhushuContent(
         fetcher = null,
-        resolver = SqlStoreResolver { packId -> if (packId == "quran-core") JdbcSqlStore(quranPack) else null },
+        resolver = SqlStoreResolver { packId ->
+            if (packId == "quran-core") quranPack?.let { JdbcSqlStore(it) } else null
+        },
         atlasFetcher = atlasFetcher,
     )
 
     @Test
     fun pageLinesServeFromPackWithoutAnyJsonTransport() = runTest {
+        assumeTrue(haveQuranPack, "quran-core pack not present")
         val c = content()
         val lines = c.quran.pageLines("qpc", 1)
         assertTrue(lines.isNotEmpty(), "page 1 must have lines")
@@ -58,6 +62,7 @@ class QuranLayoutResolverTest {
 
     @Test
     fun wordRegistryServesFromPackWithoutAnyJsonTransport() = runTest {
+        assumeTrue(haveQuranPack, "quran-core pack not present")
         val c = content()
         val words = c.quran.wordRegistry("uthmani")
         assertEquals(83_665, words.size, "registry must be the full uthmani corpus")
@@ -67,7 +72,10 @@ class QuranLayoutResolverTest {
 
     @Test
     fun atlasLayerRidesScopedTransportIndependentOfMainFetcher() = runTest {
-        val atlasFetcher = ContentFetcher { path -> File(repoRoot, path).readBytes() }
+        assumeTrue(haveQuranPack, "quran-core pack not present")
+        val root = repoRoot
+        assumeTrue(root != null, "atlas bundle not present")
+        val atlasFetcher = ContentFetcher { path -> File(root!!, path).readBytes() }
         val c = content(atlasFetcher)
         val catalog = c.quran.atlas.bundles()
         assertTrue(catalog.any { it.id == "uthmani" }, "catalog must list uthmani")

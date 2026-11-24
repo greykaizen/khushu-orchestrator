@@ -205,7 +205,8 @@ class QuranContentPackTest {
         // belongs to surah 3 and must not leak in
         assertEquals(4, words.size)
         assertEquals("وَجَنَّاتٍ", words.first().text)
-        assertEquals(1, words.first().ayahNo)
+        // The fixture stores ayah_id 2255 as 2:255; every word belongs to 255.
+        assertEquals(255, words.first().ayahNo)
         assertEquals(255, words.last().ayahNo)
         c.close()
     }
