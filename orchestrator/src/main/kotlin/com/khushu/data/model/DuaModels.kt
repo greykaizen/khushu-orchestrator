@@ -1,6 +1,36 @@
 package com.khushu.data.model
 
 /**
+ * Typed block content for the rich dua fields. Empty lists mean the source
+ * predates `blocks_json`; the host then falls back to the plain field.
+ *
+ * `arabic` is block-typed too: a multi-surah dua needs each basmala on its own
+ * centered line. `title`, `post_title` and `repetition` remain plain strings.
+ */
+data class DuaBlocks(
+    val arabic: List<ContentBlock> = emptyList(),
+    val translation: List<ContentBlock> = emptyList(),
+    val transliteration: List<ContentBlock> = emptyList(),
+    val virtue: List<ContentBlock> = emptyList(),
+    val explanation: List<ContentBlock> = emptyList(),
+    val reference: List<ContentBlock> = emptyList(),
+) {
+    val isEmpty: Boolean
+        get() = arabic.isEmpty() && translation.isEmpty() && transliteration.isEmpty() &&
+            virtue.isEmpty() && explanation.isEmpty() && reference.isEmpty()
+
+    fun field(name: String): List<ContentBlock> = when (name) {
+        "arabic" -> arabic
+        "translation" -> translation
+        "transliteration" -> transliteration
+        "virtue" -> virtue
+        "explanation" -> explanation
+        "reference" -> reference
+        else -> emptyList()
+    }
+}
+
+/**
  * One dua/dhikr entry from `assets/dua_dhikr/` (lifewithallah corpus,
  * 491 entries). Arabic + translation + transliteration are plain text;
  * `repetition` is the donor's display string (e.g. "(1x)", "(3x)").
@@ -27,6 +57,11 @@ data class Dua(
     val audioUrl: String?,
     /** Donor citation (e.g. "Abū Dāwūd 2130"). */
     val reference: String?,
+    /**
+     * Typed blocks for arabic/translation/transliteration/virtue/explanation/
+     * reference. Defaults to empty for the JSON fallback and pre-v2026.11 packs.
+     */
+    val blocks: DuaBlocks = DuaBlocks(),
 )
 
 /** A dua subcategory group: slug + localized display info. */

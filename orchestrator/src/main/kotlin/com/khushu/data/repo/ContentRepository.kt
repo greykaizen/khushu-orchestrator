@@ -195,7 +195,7 @@ class KhushuContent(
     val quran: QuranApi = QuranApi(fetcher ?: jsonLessFetcher, sqlDispatcher, resolver, atlasFetcher)
     val catalogs: CatalogApi = CatalogApi(fetcher ?: jsonLessFetcher)
     val curated: CuratedApi = CuratedApi(fetcher ?: jsonLessFetcher)
-    val dua: DuaApi = DuaApi(fetcher ?: jsonLessFetcher, resolver)
+    val dua: DuaApi = DuaApi(fetcher ?: jsonLessFetcher, resolver, jsonAvailable = fetcher != null)
     val adhan: AdhanApi = AdhanApi(fetcher ?: jsonLessFetcher)
     val islamicEvents: IslamicEventsApi = IslamicEventsApi(fetcher, resolver)
 
@@ -785,7 +785,19 @@ class CatalogApi internal constructor(fetcher: ContentFetcher) {
  * contract). Local recitation audio mirrors ship as
  * `assets/dua_dhikr/dua_{id}.opus`.
  */
-class DuaApi internal constructor(fetcher: ContentFetcher, resolver: SqlStoreResolver? = null) {
+class DuaApi internal constructor(
+    fetcher: ContentFetcher,
+    resolver: SqlStoreResolver? = null,
+    /**
+     * False when the host retired the JSON transport (v1.7.6) and passed the
+     * fail-fast stand-in fetcher. With no pack installed there is then NO
+     * source for this domain at all, and every read must degrade to "empty"
+     * instead of throwing: a missing content pack is a normal first-launch
+     * state, not a programming error, and it must not take down a caller that
+     * only wanted prayer times.
+     */
+    private val jsonAvailable: Boolean = true,
+) {
 
     /** Host resolver for the `content` pack; null → legacy JSON path. */
     private val resolver = resolver
@@ -800,16 +812,18 @@ class DuaApi internal constructor(fetcher: ContentFetcher, resolver: SqlStoreRes
     // ── duas & dhikr ──────────────────────────────────────────────────────
 
     /** All 491 duas (arabic + translation + transliteration + virtue + audio). */
-    suspend fun duas(): List<Dua> = sql()?.duas() ?: json.duas()
+    suspend fun duas(): List<Dua> = sql()?.duas() ?: if (jsonAvailable) json.duas() else emptyList()
 
     /** One dua by id (1..491). */
-    suspend fun dua(id: Int): Dua? = sql()?.dua(id) ?: json.dua(id)
+    suspend fun dua(id: Int): Dua? = sql()?.dua(id) ?: if (jsonAvailable) json.dua(id) else null
 
     /** The 30 subcategory groups (12 main-adhkar + 18 other-adhkar). */
-    suspend fun categories(): List<DuaCategory> = sql()?.categories() ?: json.categories()
+    suspend fun categories(): List<DuaCategory> =
+        sql()?.categories() ?: if (jsonAvailable) json.categories() else emptyList()
 
     /** Duas of one subcategory slug (e.g. `morning-evening`). */
-    suspend fun bySubcategory(subcategory: String): List<Dua> = sql()?.bySubcategory(subcategory) ?: json.bySubcategory(subcategory)
+    suspend fun bySubcategory(subcategory: String): List<Dua> =
+        sql()?.bySubcategory(subcategory) ?: if (jsonAvailable) json.bySubcategory(subcategory) else emptyList()
 
     /**
      * Full-text search across every dua, best match first. The pack's FTS index
@@ -819,7 +833,7 @@ class DuaApi internal constructor(fetcher: ContentFetcher, resolver: SqlStoreRes
     suspend fun search(query: String, limit: Int = 40): List<Dua> =
         sql()?.search(query, limit) ?: run {
             val needle = query.trim()
-            if (needle.isEmpty()) {
+            if (needle.isEmpty() || !jsonAvailable) {
                 emptyList()
             } else {
                 json.duas().filter { dua ->
@@ -919,24 +933,29 @@ class DuaApi internal constructor(fetcher: ContentFetcher, resolver: SqlStoreRes
     // ── reading articles (raw HTML passthrough) ───────────────────────────
 
     /** Article index: 12 categories → 186 entries. */
-    suspend fun articleCategories(): List<DuaArticleCategory> = json.articleCategories()
+    suspend fun articleCategories(): List<DuaArticleCategory> =
+        if (jsonAvailable) json.articleCategories() else emptyList()
 
     /** Flat article list across all categories. */
-    suspend fun articles(): List<DuaArticleInfo> = json.articles()
+    suspend fun articles(): List<DuaArticleInfo> =
+        if (jsonAvailable) json.articles() else emptyList()
 
     /** One article by its [DuaArticleInfo.filePath] — RAW HTML content. */
-    suspend fun article(filePath: String): DuaArticle? = json.article(filePath)
+    suspend fun article(filePath: String): DuaArticle? =
+        if (jsonAvailable) json.article(filePath) else null
 
     // ── asma ul husna ─────────────────────────────────────────────────────
 
     /** The 11 available language codes for the 99 Names packs. */
     val asmaLanguages: List<String> = asma.languages
 
-    /** One 99-Names language pack. */
-    suspend fun asmaPack(lang: String): AsmaPack? = asma.pack(lang)
+    /** One 99-Names language pack, or null when only the pack transport exists. */
+    suspend fun asmaPack(lang: String): AsmaPack? =
+        if (jsonAvailable) asma.pack(lang) else null
 
-    /** One Name by number (1..99) in a language. */
-    suspend fun asmaName(lang: String, number: Int): AsmaName? = asma.name(lang, number)
+    /** One Name by number (1..99) in a language, or null when only the pack transport exists. */
+    suspend fun asmaName(lang: String, number: Int): AsmaName? =
+        if (jsonAvailable) asma.name(lang, number) else null
 
     // ── local audio mirrors (byte-identical donor Opus; Media3 on Android 12+) ──
 

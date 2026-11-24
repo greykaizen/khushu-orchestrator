@@ -1,9 +1,11 @@
 package com.khushu.data.dua
 
+import com.khushu.data.markup.ContentBlockParser
 import com.khushu.data.model.Dua
 import com.khushu.data.model.DuaArticle
 import com.khushu.data.model.DuaArticleCategory
 import com.khushu.data.model.DuaArticleInfo
+import com.khushu.data.model.DuaBlocks
 import com.khushu.data.model.DuaCategory
 import com.khushu.data.transport.ContentFetcher
 import kotlinx.coroutines.sync.Mutex
@@ -65,6 +67,7 @@ class DuaSource(
                 explanation = o["explanation"]?.jsonPrimitive?.content ?: "",
                 audioUrl = o["audio_url"]?.let { if (it.jsonPrimitive.isString) it.jsonPrimitive.content else null },
                 reference = o["reference"]?.let { if (it.jsonPrimitive.isString) it.jsonPrimitive.content else null },
+                blocks = o["blocks"]?.let { ContentBlockParser.parseDuaBlocks(it.toString()) } ?: DuaBlocks(),
             )
         }
         DuaIndex(list, list.associateBy { it.id }).also { duaIndex = it }

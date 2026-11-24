@@ -5,6 +5,7 @@ package com.khushu.data.markup
  *
  * Verified vocabulary (full-corpus scan, docs/sunnah-plan.md §1.2):
  *   <br> · <b> · <i> · <sup> · <qref>…</qref> (Quran refs) · <ref>…</ref> (hadith refs)
+ *   · <hon kind="ra|saw|swt|awj|rh|as|jj|other">…</hon> (honorifics)
  *
  * Unknown tags pass through as LITERAL TEXT — never dropped, never rendered
  * as markup. This is the systematic fix for the Osprey rendering failure.
@@ -24,14 +25,63 @@ sealed interface ContentSpan {
      * Null when the markup carried no id — never invent a link.
      */
     data class HadithRef(val raw: String, val id: String? = null) : ContentSpan
+    /**
+     * A honorific that already exists in the canonical text. The renderer
+     * decides presentation (Arabic-only or Arabic + superscript gloss); the
+     * parser never adds or removes an honorific.
+     */
+    data class Honorific(val kind: HonorificKind, val text: String) : ContentSpan
+}
+
+enum class HonorificKind {
+    RA, SAW, SWT, AWJ, RH, AS, JJ, OTHER;
+
+    companion object {
+        fun from(raw: String?): HonorificKind = when (raw?.trim()?.lowercase()) {
+            "ra" -> RA
+            "saw" -> SAW
+            "swt" -> SWT
+            "awj" -> AWJ
+            "rh" -> RH
+            "as" -> AS
+            "jj" -> JJ
+            else -> OTHER
+        }
+    }
 }
 
 object ContentMarkup {
 
     // Compiled ONCE. The old parser built 2–3 Regex per block; over the 301 MB
     // hadith index build that is hundreds of thousands of compilations.
-    private val TAG_RE = Regex("<(/?)(br|b|i|sup|qref|ref)[^>]*/?>", RegexOption.IGNORE_CASE)
+    private val TAG_RE = Regex("<(/?)(br|b|i|sup|qref|ref|hon)[^>]*/?>", RegexOption.IGNORE_CASE)
     private val REF_ID_RE = Regex("""\bid\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""", RegexOption.IGNORE_CASE)
+    private val HON_KIND_RE = Regex("""\bkind\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""", RegexOption.IGNORE_CASE)
+    private val ENTITY_RE = Regex("&(#x?[0-9A-Fa-f]+|[a-zA-Z]+);")
+
+    /**
+     * Decode the entity subset the canonicalizer emits (`&amp;`, numeric
+     * entities such as `&#42;`). Applied to text RUNS after tag parsing, so a
+     * decoded `&lt;b&gt;` stays literal text and is never re-interpreted as a tag.
+     */
+    fun decodeEntities(text: String): String = ENTITY_RE.replace(text) { m ->
+        val token = m.groupValues[1]
+        when {
+            token.startsWith("#x", ignoreCase = true) ->
+                token.drop(2).toIntOrNull(16)?.let { cp -> String(Character.toChars(cp)) } ?: m.value
+            token.startsWith("#") ->
+                token.drop(1).toIntOrNull()?.let { cp -> String(Character.toChars(cp)) } ?: m.value
+            else -> when (token.lowercase()) {
+                "amp" -> "&"
+                "lt" -> "<"
+                "gt" -> ">"
+                "quot" -> "\""
+                "apos" -> "'"
+                "nbsp" -> "\u00a0"
+                else -> m.value
+            }
+        }
+    }
     private val QREF_CLOSE_RE = Regex("</qref\\s*>", RegexOption.IGNORE_CASE)
     private val REF_CLOSE_RE = Regex("</ref\\s*>", RegexOption.IGNORE_CASE)
 
@@ -46,16 +96,34 @@ object ContentMarkup {
             val m = TAG_RE.find(text, cursor)
             if (m == null) {
                 val tail = text.substring(cursor)
-                if (tail.isNotEmpty()) stack.last().add(ContentSpan.Text(tail))
+                if (tail.isNotEmpty()) stack.last().add(ContentSpan.Text(decodeEntities(tail)))
                 break
             }
             val before = text.substring(cursor, m.range.first)
-            if (before.isNotEmpty()) stack.last().add(ContentSpan.Text(before))
+            if (before.isNotEmpty()) stack.last().add(ContentSpan.Text(decodeEntities(before)))
 
             val closing = m.groupValues[1] == "/"
             val name = m.groupValues[2].lowercase()
 
             when {
+                // Typed honorific: capture inner text up to its close tag.
+                !closing && name == "hon" -> {
+                    val openEnd = m.range.last + 1
+                    val closeRe = Regex("</hon\\s*>", RegexOption.IGNORE_CASE)
+                    val close = closeRe.find(text, openEnd)
+                    if (close == null) {
+                        stack.last().add(ContentSpan.Text(m.value))
+                        cursor = openEnd
+                    } else {
+                        val inner = text.substring(openEnd, close.range.first)
+                        val kindRaw = HON_KIND_RE.find(m.value)?.let { a ->
+                            a.groupValues[1].ifEmpty { a.groupValues[2] }.ifEmpty { a.groupValues[3] }
+                        }
+                        stack.last().add(ContentSpan.Honorific(HonorificKind.from(kindRaw), decodeEntities(inner)))
+                        cursor = close.range.last + 1
+                    }
+                    continue
+                }
                 // Self-contained custom refs: capture inner content up to close tag.
                 !closing && (name == "qref" || name == "ref") -> {
                     val openEnd = m.range.last + 1
@@ -70,8 +138,8 @@ object ContentMarkup {
                             a.groupValues[1].ifEmpty { a.groupValues[2] }.ifEmpty { a.groupValues[3] }
                         }?.takeIf { it.isNotEmpty() }
                         stack.last().add(
-                            if (name == "qref") ContentSpan.QuranRef(inner, id)
-                            else ContentSpan.HadithRef(inner, id),
+                            if (name == "qref") ContentSpan.QuranRef(decodeEntities(inner), id)
+                            else ContentSpan.HadithRef(decodeEntities(inner), id),
                         )
                         cursor = close.range.last + 1
                     }
@@ -128,6 +196,7 @@ object ContentMarkup {
             is ContentSpan.Superscript -> append(plainText(s.children))
             is ContentSpan.QuranRef -> append(s.raw)
             is ContentSpan.HadithRef -> append(s.raw)
+            is ContentSpan.Honorific -> append(s.text)
         }
     }
 }

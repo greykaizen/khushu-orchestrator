@@ -102,12 +102,111 @@ class SqlHadithSource(private val collection: String, private val store: SqlStor
         )
     }
 
+    /**
+     * Batch form of [byId]: ONE query per table for up to [MAX_IDS_PER_QUERY]
+     * ids, assembled by id. A 60-hadith book page therefore costs 7 queries
+     * (ids + 6 facts) instead of ~361 — the difference between one round trip
+     * and a per-hadith fan-out on the remote Turso store, and a large cut in
+     * cursor/statement setup locally.
+     *
+     * Order follows [hadithIds]; ids missing from the pack are dropped (matching
+     * [byId]'s null); duplicate ids are kept. Content rows are walked in query
+     * order so the last row for the requested language wins, exactly as [byId].
+     */
+    suspend fun byIds(hadithIds: List<String>, lang: String): List<Hadith> {
+        if (hadithIds.isEmpty()) return emptyList()
+        val unique = hadithIds.distinct()
+        val bases = HashMap<String, Row>(unique.size)
+        val references = HashMap<String, MutableList<Reference>>(unique.size)
+        val related = HashMap<String, MutableList<String>>(unique.size)
+        val grades = HashMap<String, MutableList<Grade>>(unique.size)
+        val narrators = HashMap<String, MutableList<NarratorRef>>(unique.size)
+        val blocksByLang = HashMap<String, MutableMap<String, List<ContentBlock>>>(unique.size)
+        val contentLangs = HashMap<String, MutableList<String>>(unique.size)
+
+        for (chunk in unique.chunked(MAX_IDS_PER_QUERY)) {
+            val marks = chunk.joinToString(",") { "?" }
+            store.query(
+                "SELECT id,urn,collection_id,book_id,chapter_id,number FROM ${t("hadiths")} WHERE id IN ($marks)",
+                chunk,
+            ).forEach { row -> row.stringAt(0)?.let { bases[it] = row } }
+
+            store.query(
+                "SELECT hadith_id,lang,blocks_json FROM ${t("hadith_contents")} WHERE hadith_id IN ($marks)",
+                chunk,
+            ).forEach { row ->
+                val id = row.stringAt(0) ?: return@forEach
+                val l = row.stringAt(1).orEmpty()
+                contentLangs.getOrPut(id) { mutableListOf() } += l
+                val blocks = row.stringAt(2)?.let(ContentBlockParser::parseBlocks).orEmpty()
+                if (l.isNotEmpty()) blocksByLang.getOrPut(id) { mutableMapOf() }[l] = blocks
+            }
+
+            store.query(
+                "SELECT hadith_id,type,value FROM ${t("hadith_references")} WHERE hadith_id IN ($marks)",
+                chunk,
+            ).forEach { row ->
+                val id = row.stringAt(0) ?: return@forEach
+                references.getOrPut(id) { mutableListOf() } += Reference(row.stringAt(1) ?: "", row.stringAt(2) ?: "")
+            }
+
+            store.query(
+                "SELECT hadith_id,related_hadith_id FROM ${t("hadith_related")} WHERE hadith_id IN ($marks)",
+                chunk,
+            ).forEach { row ->
+                val id = row.stringAt(0) ?: return@forEach
+                row.stringAt(1)?.let { related.getOrPut(id) { mutableListOf() } += it }
+            }
+
+            store.query(
+                "SELECT hadith_id,grade_id,label,lang FROM ${t("hadith_grades")} WHERE hadith_id IN ($marks)",
+                chunk,
+            ).forEach { row ->
+                val id = row.stringAt(0) ?: return@forEach
+                grades.getOrPut(id) { mutableListOf() } +=
+                    Grade(row.stringAt(1) ?: "", row.stringAt(2) ?: "", row.stringAt(3) ?: "")
+            }
+
+            store.query(
+                "SELECT hadith_id,source,narrator_id,position FROM ${t("hadith_narrators")} " +
+                    "WHERE hadith_id IN ($marks) ORDER BY hadith_id, position",
+                chunk,
+            ).forEach { row ->
+                val id = row.stringAt(0) ?: return@forEach
+                narrators.getOrPut(id) { mutableListOf() } += NarratorRef(
+                    row.stringAt(1) ?: "", (row.stringAt(2) ?: "0").toInt(), row.intAt(3) ?: 0,
+                )
+            }
+        }
+
+        return hadithIds.mapNotNull { id ->
+            val base = bases[id] ?: return@mapNotNull null
+            Hadith(
+                id = base.stringAt(0) ?: id, urn = base.stringAt(1)?.toLongOrNull(),
+                collectionId = base.stringAt(2) ?: collection, bookId = base.stringAt(3) ?: "",
+                chapterId = base.stringAt(4), number = base.stringAt(5),
+                blocks = blocksByLang[id]?.get(lang).orEmpty(),
+                references = references[id].orEmpty(), relatedIds = related[id].orEmpty(),
+                grades = grades[id].orEmpty(), narratorRefs = narrators[id].orEmpty(),
+                contentLangs = contentLangs[id].orEmpty().filter { it.isNotEmpty() }.distinct(),
+            )
+        }
+    }
+
     /** Full-text search over this collection (external-content FTS5 -> rowid -> hadith id). */
-    suspend fun search(query: String, lang: String, limit: Int = 50): List<Hadith> = store.query(
-        "SELECT ht.hadith_id FROM ${t("hadith_fts")} JOIN ${t("hadith_text")} ht ON ht.rowid = ${t("hadith_fts")}.rowid " +
-            "WHERE ${t("hadith_fts")} MATCH ? LIMIT ?",
-        listOf(query, limit),
-    ).mapNotNull { r -> r.stringAt(0)?.let { byId(it, lang) } }
+    suspend fun search(query: String, lang: String, limit: Int = 50): List<Hadith> {
+        val ids = store.query(
+            "SELECT ht.hadith_id FROM ${t("hadith_fts")} JOIN ${t("hadith_text")} ht ON ht.rowid = ${t("hadith_fts")}.rowid " +
+                "WHERE ${t("hadith_fts")} MATCH ? LIMIT ?",
+            listOf(query, limit),
+        ).mapNotNull { it.stringAt(0) }
+        return byIds(ids, lang)
+    }
+
+    private companion object {
+        /** Stay well below SQLite's (and Turso's) bind-parameter ceiling. */
+        const val MAX_IDS_PER_QUERY = 500
+    }
 }
 
 /** SQL-backed narrator biographies over the `hadith-scholars` pack. */

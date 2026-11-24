@@ -287,13 +287,39 @@ class KhushuOrchestrator(
     @Volatile private var duaSlugIndex: Map<String, List<com.khushu.data.model.Dua>>? = null
     private val slugMutex = Mutex()
 
+    /**
+     * The dua corpus is OPTIONAL for a day model.
+     *
+     * The day model exists to serve prayer times and the adaptive dua sections;
+     * only the second half needs the corpus. Before this, a missing `content`
+     * pack (or the boot race where the pack is still being seeded) made
+     * `data.dua.duas()` throw `No ContentFetcher configured`, which killed the
+     * WHOLE build — so prayer times died because dua content was unavailable.
+     * That is the wrong dependency direction.
+     *
+     * On failure this returns an empty index and deliberately does NOT cache it,
+     * so the next build retries. Once the pack lands, [invalidateDuaIndex] clears
+     * any cached day models that were built without dua sections.
+     */
     private suspend fun duaSlugIndex(): Map<String, List<com.khushu.data.model.Dua>> =
         duaSlugIndex ?: slugMutex.withLock {
             duaSlugIndex?.let { return@withLock it }
+            val duas = runCatching { data.dua.duas() }.getOrNull()
+                ?: return@withLock emptyMap() // not cached: retry on the next build
             val out = HashMap<String, MutableList<com.khushu.data.model.Dua>>()
-            for (d in data.dua.duas()) out.getOrPut(d.subcategory) { mutableListOf() }.add(d)
+            for (d in duas) out.getOrPut(d.subcategory) { mutableListOf() }.add(d)
             out.also { duaSlugIndex = it }
         }
+
+    /**
+     * Drop the cached dua index and every cached day model that may have been
+     * built without it. Call after a `content` pack is installed so the day
+     * model picks up its dua sections without waiting for a process restart.
+     */
+    suspend fun invalidateDuaIndex() {
+        slugMutex.withLock { duaSlugIndex = null }
+        cache.clear()
+    }
 
     private suspend fun build(key: DayKey): DayModel {
         // O(1) slug lookups per probe; the index is built once per process.

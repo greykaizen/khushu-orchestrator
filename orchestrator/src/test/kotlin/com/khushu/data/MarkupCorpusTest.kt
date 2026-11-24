@@ -7,7 +7,9 @@ import kotlinx.serialization.json.jsonPrimitive
 
 import com.khushu.data.markup.ContentMarkup
 import com.khushu.data.markup.ContentSpan
+import com.khushu.data.markup.HonorificKind
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /** Full-corpus parser invariant: every hadith_contents row parses losslessly. */
@@ -35,9 +37,9 @@ class MarkupCorpusTest {
                             val plain = ContentMarkup.plainText(spans)
                             rows++
                             // Lossless: stripping markup tags must keep all visible text.
-                            val expected = raw.replace(
-                                Regex("</?(br|b|i|sup|qref|ref)[^>]*/?>", RegexOption.IGNORE_CASE), "",
-                            )
+                            val expected = ContentMarkup.decodeEntities(raw.replace(
+                                Regex("</?(br|b|i|sup|qref|ref|hon)[^>]*/?>", RegexOption.IGNORE_CASE), "",
+                            ))
                             assertEqualsNormalized(expected, plain, "$db.name [$type]")
                         }
                     }
@@ -88,5 +90,14 @@ class MarkupCorpusTest {
     fun unquotedReferenceIdIsPreserved() {
         val spans = ContentMarkup.parse("<ref id=bukhari_urn_1>Hadith 1</ref>")
         assertTrue(spans.filterIsInstance<ContentSpan.HadithRef>().single().id == "bukhari_urn_1")
+    }
+
+    @Test
+    fun honorificIsTypedAndLossless() {
+        val spans = ContentMarkup.parse("The Prophet <hon kind=\"saw\">ﷺ</hon> said")
+        val hon = spans.filterIsInstance<ContentSpan.Honorific>().single()
+        assertEquals(HonorificKind.SAW, hon.kind)
+        assertEquals("ﷺ", hon.text)
+        assertTrue(ContentMarkup.plainText(spans).contains("ﷺ"))
     }
 }

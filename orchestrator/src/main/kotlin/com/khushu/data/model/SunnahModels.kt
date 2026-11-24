@@ -2,8 +2,18 @@ package com.khushu.data.model
 
 import com.khushu.data.markup.ContentSpan
 
-/** Verified block vocabulary (full-corpus scan — docs/sunnah-plan.md §1.1). */
-enum class BlockType { MATN, SANAD, NARRATOR, NOTE, UNKNOWN }
+/**
+ * Verified block vocabulary. The first five are the hadith corpus
+ * (docs/sunnah-plan.md §1.1); the rest are the canonical dua block types.
+ */
+enum class BlockType {
+    MATN, SANAD, NARRATOR, NOTE, UNKNOWN,
+    PARAGRAPH, HEADING, BULLET, QUOTE, RAW_HTML,
+    /** Arabic body: a basmala line the host centers on its own line. */
+    BISMILLAH,
+    /** Arabic body: surah/dua text between basmalas, right-aligned. */
+    ARABIC,
+}
 
 /**
  * One content block of a hadith: typed classification plus parsed inline
@@ -14,6 +24,10 @@ data class ContentBlock(
     val rawType: String,
     val spans: List<ContentSpan>,
     val rawText: String,
+    /** Heading level (1 or 2) for [BlockType.HEADING]; null otherwise. */
+    val level: Int? = null,
+    /** Optional BCP-47 / corpus language tag for mixed-language blocks. */
+    val lang: String? = null,
 )
 
 data class Reference(val type: String, val value: String)

@@ -24,9 +24,10 @@ class SqlDuaAdhanRecitationTest {
             ?: File("missing")
 
     private val have get() = File(packsRoot, "content.db").isFile && File(packsRoot, "audio.db").isFile
+    private val haveDua get() = File(packsRoot, "content.db").isFile
 
     @Test fun duasLoad() = runTest {
-        assumeTrue(have)
+        assumeTrue(haveDua)
         JdbcSqlStore(File(packsRoot, "content.db")).use { s ->
             val src = SqlDuaSource(s, AssetResolver())
             val duas = src.duas()
@@ -38,6 +39,11 @@ class SqlDuaAdhanRecitationTest {
             assertEquals(1, src.dua(1)?.id)
             assertTrue(src.categories().isNotEmpty())
             assertTrue(src.bySubcategory(duas.first().subcategory).isNotEmpty())
+            // v2026.11 canonical blocks are read from the pack, not parsed in the host.
+            assertTrue(src.dua(1)?.blocks?.virtue?.isNotEmpty() == true, "id 1 virtue blocks missing")
+            val names = src.dua(80)?.blocks?.explanation.orEmpty()
+            assertTrue(names.any { it.type.name == "HEADING" && it.level == 1 }, "id 80 heading missing")
+            assertTrue(names.any { it.type.name == "HEADING" && it.level == 2 }, "id 80 subheading missing")
         }
     }
 
