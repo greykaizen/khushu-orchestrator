@@ -2,6 +2,9 @@ package com.khushu.data.dua
 
 import com.khushu.data.markup.ContentBlockParser
 import com.khushu.data.model.Dua
+import com.khushu.data.model.DuaArticle
+import com.khushu.data.model.DuaArticleCategory
+import com.khushu.data.model.DuaArticleInfo
 import com.khushu.data.model.DuaBlocks
 import com.khushu.data.model.DuaCategory
 import com.khushu.data.store.AssetResolver
@@ -94,6 +97,73 @@ class SqlDuaSource(private val content: SqlStore, private val assets: AssetResol
             .filter { it.isNotBlank() }
         if (terms.isEmpty()) return null
         return terms.joinToString(" ") { "$it*" }
+    }
+
+    // ── reading articles (raw HTML passthrough) ──────────────────────────
+
+    /**
+     * Article index from the content pack: categories with their member articles.
+     * Membership is kept (rather than distinct articles) because the donor index
+     * intentionally lists some readings under two categories.
+     */
+    suspend fun articleCategories(): List<DuaArticleCategory> {
+        val rows = content.query(
+            // Unique labels: the row abstraction is keyed by column label, so a
+            // second bare `id`/`slug` would overwrite the category's value.
+            "SELECT c.id AS cat_id,c.name AS cat_name,c.slug AS cat_slug,c.count AS cat_count," +
+                "a.id AS article_id,a.title AS article_title,a.slug AS article_slug," +
+                "a.link AS article_link,a.body_path AS article_path " +
+                "FROM article_categories c " +
+                "LEFT JOIN article_members m ON m.category_id=c.id " +
+                "LEFT JOIN article_items a ON a.id=m.article_id AND a.has_body=1 " +
+                // member rowids preserve donor order (category ids are not ordered,
+                // and `c.rowid` aliases the INTEGER PRIMARY KEY id).
+                "ORDER BY (SELECT MIN(m2.rowid) FROM article_members m2 " +
+                "WHERE m2.category_id=c.id),m.rowid",
+        )
+        return rows.groupBy { it.longAt(0)?.toInt() ?: 0 }.map { (_, group) ->
+            val head = group.first()
+            DuaArticleCategory(
+                id = head.longAt(0)?.toInt() ?: 0,
+                name = head.stringAt(1).orEmpty(),
+                slug = head.stringAt(2).orEmpty(),
+                count = head.longAt(3)?.toInt() ?: 0,
+                articles = group.mapNotNull { r ->
+                    val id = r.longAt(4)?.toInt() ?: return@mapNotNull null
+                    val path = r.stringAt(8).orEmpty()
+                    if (path.isBlank()) return@mapNotNull null
+                    DuaArticleInfo(
+                        id = id,
+                        title = r.stringAt(5).orEmpty(),
+                        slug = r.stringAt(6).orEmpty(),
+                        link = r.stringAt(7),
+                        filePath = path,
+                    )
+                },
+            )
+        }
+    }
+
+    /** Flat article list across all categories (membership order). */
+    suspend fun articles(): List<DuaArticleInfo> =
+        articleCategories().flatMap { it.articles }
+
+    /** One article by its `body_path`; body is RAW HTML passthrough. */
+    suspend fun article(filePath: String): DuaArticle? {
+        if (!filePath.startsWith("articles/") && !filePath.startsWith("related-articles/")) return null
+        return content.query(
+            "SELECT id,title,slug,link,content_html FROM article_items " +
+                "WHERE body_path=? AND has_body=1 LIMIT 1",
+            listOf(filePath),
+        ).firstOrNull()?.let { r ->
+            DuaArticle(
+                id = r.longAt(0)?.toInt() ?: 0,
+                title = r.stringAt(1).orEmpty(),
+                slug = r.stringAt(2).orEmpty(),
+                link = r.stringAt(3),
+                contentHtml = r.stringAt(4).orEmpty(),
+            )
+        }
     }
 
     /** Subcategory slugs present, with dua counts (for a picker). */

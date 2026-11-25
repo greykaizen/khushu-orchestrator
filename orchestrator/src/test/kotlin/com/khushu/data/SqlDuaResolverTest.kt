@@ -19,6 +19,8 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 import okio.Path.Companion.toPath
@@ -59,6 +61,26 @@ class SqlDuaResolverTest {
         val cats = content.dua.categories()
         assertTrue(cats.isNotEmpty())
         assertEquals("marriage-and-children", content.dua.dua(1)?.subcategory)
+    }
+
+    @Test
+    fun articlesServeFromPackWithoutAnyJsonTransport() = runTest {
+        val content = KhushuContent(deadFetcher, resolver)
+        val categories = content.dua.articleCategories()
+        assertEquals(13, categories.size)
+        assertEquals(202, categories.sumOf { it.articles.size })
+        assertEquals(185, content.dua.articles().map { it.id }.distinct().size)
+        assertTrue(categories.any { it.name == "Related Readings" })
+        // Donor order, not numeric id order: Muharram is first in the source index.
+        assertEquals("Muharram", categories.first().name)
+        assertEquals(4156, categories.first().articles.first().id)
+
+        val first = categories.first { it.articles.isNotEmpty() }.articles.first()
+        val article = content.dua.article(first.filePath)
+        assertNotNull(article)
+        assertEquals(first.id, article.id)
+        assertTrue(article.contentHtml.startsWith("<"), "body is raw HTML passthrough")
+        assertNull(content.dua.article("../dua_data.json"))
     }
 
     /** Repo root with the JSON archive corpus (same discovery as the other slice tests). */

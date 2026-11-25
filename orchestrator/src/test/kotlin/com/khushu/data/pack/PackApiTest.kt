@@ -46,7 +46,8 @@ class PackApiTest {
         assertEquals(104, manifest.all().size)
         assertNotNull(manifest.byId("content"))
         assertEquals("v2026.11", manifest.byId("content")!!.version)
-        assertEquals("v2026.09", manifest.byId("hadith-bukhari")!!.version)
+        assertEquals("v2026.11", manifest.byId("hadith-bukhari")!!.version)
+        assertTrue(manifest.all().all { it.version == "v2026.11" })
         assertEquals(4, manifest.byTier("prebundle").size)
         assertTrue(manifest.byTier("prebundle").any { it.id == "quran-core" })
         // family grouping: 51 translation packs
