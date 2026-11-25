@@ -11,9 +11,12 @@ import com.khushu.data.catalog.CatalogSource
 import com.khushu.data.catalog.SyncTracker
 import com.khushu.data.content.CuratedContentSource
 import com.khushu.data.content.RecommendedSource
+import com.khushu.data.content.ScienceTopic
 import com.khushu.data.content.ScienceTopicsSource
 import com.khushu.data.content.SimilarVersesSource
+import com.khushu.data.content.SqlScienceSource
 import com.khushu.data.content.SqlSelectionSource
+import com.khushu.data.content.SqlTopicsSource
 import com.khushu.data.content.TopicsSource
 import com.khushu.data.content.VerseSet
 import com.khushu.data.model.AyahMeta
@@ -194,7 +197,7 @@ class KhushuContent(
 
     val quran: QuranApi = QuranApi(fetcher ?: jsonLessFetcher, sqlDispatcher, resolver, atlasFetcher)
     val catalogs: CatalogApi = CatalogApi(fetcher ?: jsonLessFetcher)
-    val curated: CuratedApi = CuratedApi(fetcher ?: jsonLessFetcher)
+    val curated: CuratedApi = CuratedApi(fetcher ?: jsonLessFetcher, packStore = { id -> resolver?.resolve(id) })
     val dua: DuaApi = DuaApi(fetcher ?: jsonLessFetcher, resolver, jsonAvailable = fetcher != null)
     val adhan: AdhanApi = AdhanApi(fetcher ?: jsonLessFetcher)
     val islamicEvents: IslamicEventsApi = IslamicEventsApi(fetcher, resolver)
@@ -700,12 +703,57 @@ class QuranApi internal constructor(
     suspend fun mutashabihatPhrases(): List<MutashabihatPhrase> = similar.phrases()
     suspend fun mutashabihatOccurrences(phraseId: Int): List<MutashabihatOccurrence> =
         similar.occurrencesOf(phraseId)
-    suspend fun topics(type: String? = null): List<Topic> = topics.topics(type)
-    suspend fun topic(id: Int): Topic? = topics.topic(id)
-    suspend fun topicBySlug(slug: String): Topic? = topics.topicBySlug(slug)
-    suspend fun topicsForAyah(ayahId: Int): List<Topic> = topics.topicsForAyah(ayahId)
-    suspend fun topicRelations(topicId: Int, type: String? = null): List<TopicRelation> =
-        topics.relations(topicId, type)
+    /**
+     * Topic reads serve the `quran-core` pack when the host resolved one, and
+     * fall back to the JSON corpus. The app host is JSON-less, so without this
+     * seam every topic call threw and callers saw "no topics in this pack".
+     */
+    private suspend fun sqlTopics(): SqlTopicsSource? = packStore("quran-core")?.let(::SqlTopicsSource)
+
+    suspend fun topics(type: String? = null): List<Topic> {
+        val sql = sqlTopics()
+        if (sql != null) {
+            val rows = runCatching { sql.topics(type) }.getOrNull()
+            if (rows != null) return rows
+        }
+        return topics.topics(type)
+    }
+
+    suspend fun topic(id: Int): Topic? {
+        val sql = sqlTopics()
+        if (sql != null) {
+            val row = runCatching { sql.topic(id) }.getOrNull()
+            if (row != null) return row
+        }
+        return topics.topic(id)
+    }
+
+    suspend fun topicBySlug(slug: String): Topic? {
+        val sql = sqlTopics()
+        if (sql != null) {
+            val row = runCatching { sql.topicBySlug(slug) }.getOrNull()
+            if (row != null) return row
+        }
+        return topics.topicBySlug(slug)
+    }
+
+    suspend fun topicsForAyah(ayahId: Int): List<Topic> {
+        val sql = sqlTopics()
+        if (sql != null) {
+            val rows = runCatching { sql.topicsForAyah(ayahId) }.getOrNull()
+            if (rows != null) return rows
+        }
+        return topics.topicsForAyah(ayahId)
+    }
+
+    suspend fun topicRelations(topicId: Int, type: String? = null): List<TopicRelation> {
+        val sql = sqlTopics()
+        if (sql != null) {
+            val rows = runCatching { sql.relations(topicId, type) }.getOrNull()
+            if (rows != null) return rows
+        }
+        return topics.relations(topicId, type)
+    }
 
     // ── search ──────────────────────────────────────────────────────────────
 
@@ -932,17 +980,17 @@ class DuaApi internal constructor(
 
     // ── reading articles (raw HTML passthrough) ───────────────────────────
 
-    /** Article index: 12 categories → 186 entries. */
+    /** Article index from the content pack; JSON is only the no-pack fallback. */
     suspend fun articleCategories(): List<DuaArticleCategory> =
-        if (jsonAvailable) json.articleCategories() else emptyList()
+        sql()?.articleCategories() ?: if (jsonAvailable) json.articleCategories() else emptyList()
 
     /** Flat article list across all categories. */
     suspend fun articles(): List<DuaArticleInfo> =
-        if (jsonAvailable) json.articles() else emptyList()
+        sql()?.articles() ?: if (jsonAvailable) json.articles() else emptyList()
 
     /** One article by its [DuaArticleInfo.filePath] — RAW HTML content. */
     suspend fun article(filePath: String): DuaArticle? =
-        if (jsonAvailable) json.article(filePath) else null
+        sql()?.article(filePath) ?: if (jsonAvailable) json.article(filePath) else null
 
     // ── asma ul husna ─────────────────────────────────────────────────────
 
@@ -1227,7 +1275,11 @@ data class IslamicEventEntry(
 )
 
 /** Curated-content surface: exclusive verse sets, recommended recitations, science topics. */
-class CuratedApi internal constructor(fetcher: ContentFetcher) {
+class CuratedApi internal constructor(
+    fetcher: ContentFetcher,
+    /** Pack resolver: verse sets, recitation rules and science topics serve SQL when a content pack exists. */
+    private val packStore: suspend (String) -> SqlStore? = { null },
+) {
 
     private val verses = CuratedContentSource(fetcher)
     private val recommended = RecommendedSource(fetcher)
@@ -1238,7 +1290,14 @@ class CuratedApi internal constructor(fetcher: ContentFetcher) {
     suspend fun exclusiveVerseLanguages(set: VerseSet) = verses.availableLanguages(set)
     suspend fun recommendedRules() = recommended.rules()
     suspend fun recommendedTexts(lang: String = "en") = recommended.texts(lang)
-    suspend fun scienceTopics() = science.topics()
+    suspend fun scienceTopics(): List<ScienceTopic> {
+        val store = packStore("content")
+        if (store != null) {
+            val rows = runCatching { SqlScienceSource(store).topics() }.getOrNull()
+            if (rows != null) return rows
+        }
+        return science.topics()
+    }
 }
 
 /**
